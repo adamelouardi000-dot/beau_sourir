@@ -9,6 +9,9 @@
 -- Table Utilisateurs
 -- Racine de toute la hiérarchie (Staff / Admin / Medecin / Secretaire)
 -- ==========================================================
+create database beau_sourir;
+use beau_soourir ;
+
 CREATE TABLE IF NOT EXISTS Utilisateurs (
                                             id BIGINT AUTO_INCREMENT PRIMARY KEY,
 

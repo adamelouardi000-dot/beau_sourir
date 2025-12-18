@@ -2,99 +2,71 @@ package ma.dentalTech.repository.test;
 
 import ma.dentalTech.configuration.ApplicationContext;
 import ma.dentalTech.configuration.SessionFactory;
-import ma.dentalTech.entities.agenda.RDV;
-import ma.dentalTech.entities.dossierMedical.*;
-import ma.dentalTech.entities.patient.Patient;
-import ma.dentalTech.entities.enums.Sexe;
-import ma.dentalTech.entities.enums.Assurance;
-import ma.dentalTech.repository.modules.agenda.api.RDVRepository;
-import ma.dentalTech.repository.modules.dossierMedical.api.*;
-import ma.dentalTech.repository.modules.facturation.api.FactureRepository;
-import ma.dentalTech.repository.modules.patient.api.PatientRepository;
 
-import java.time.LocalDateTime;
-import java.time.LocalDate;
-import java.util.List;
+import ma.dentalTech.repository.modules.patient.api.PatientRepository;
+import ma.dentalTech.repository.modules.patient.api.AntecedentRepository;
+import ma.dentalTech.repository.modules.cabinet.api.CabinetMedicalRepository;
+import ma.dentalTech.repository.modules.agenda.api.AgendaMensuelRepository;
+import ma.dentalTech.repository.modules.facturation.api.FactureRepository;
 
 public class TestRepo {
 
-    private final PatientRepository patientRepo = ApplicationContext.getBean(PatientRepository.class);
-    private final DossierMedicalRepo dmRepo = ApplicationContext.getBean(DossierMedicalRepo.class);
-    private final RDVRepository rdvRepo = ApplicationContext.getBean(RDVRepository.class);
-    private final ConsultationRepo consultationRepo = ApplicationContext.getBean(ConsultationRepo.class);
-    private final ActeRepository acteRepo = ApplicationContext.getBean(ActeRepository.class);
-    private final FactureRepository factureRepo = ApplicationContext.getBean(FactureRepository.class);
-    private final SituationFinanciereRepo sfRepo = ApplicationContext.getBean(SituationFinanciereRepo.class);
-    private final OrdonnanceRepo ordonnanceRepo = ApplicationContext.getBean(OrdonnanceRepo.class);
-    private final CertificatRepo certificatRepo = ApplicationContext.getBean(CertificatRepo.class);
+    // ===== Repositories injectés via ApplicationContext =====
+    private static final PatientRepository patientRepo =
+            ApplicationContext.getBean(PatientRepository.class);
 
-    private Long pId, dmId, rdvId, consId;
+    private static final AntecedentRepository antecedentRepo =
+            ApplicationContext.getBean(AntecedentRepository.class);
 
-    void insertProcess() {
-        System.out.println("=== START INSERT PROCESS ===");
+    private static final CabinetMedicalRepository cabinetRepo =
+            ApplicationContext.getBean(CabinetMedicalRepository.class);
 
-        // 1. Patient [cite: 28]
-        Patient p = Patient.builder()
-                .nom("TEST_NOM").prenom("TEST_PRENOM")
-                .sexe(Sexe.Homme).assurance(Assurance.CNOPS).build();
-        patientRepo.create(p);
-        pId = p.getId();
+    private static final AgendaMensuelRepository agendaRepo =
+            ApplicationContext.getBean(AgendaMensuelRepository.class);
 
-        // 2. Dossier Médical [cite: 12]
-        DossierMedical dm = new DossierMedical();
-        dm.setPatient(p);
-        dmRepo.create(dm);
-        dmId = dm.getId();
+    private static final FactureRepository factureRepo =
+            ApplicationContext.getBean(FactureRepository.class);
 
-        // 3. RDV (Correction type LocalDate)
-        RDV rdv = new RDV();
-        rdv.setDate(LocalDate.now().plusDays(1));
-        rdvRepo.create(rdv);
-        rdvId = rdv.getId();
+    // =======================================================
 
-        // 4. Consultation [cite: 11]
-        Consultation cons = new Consultation();
-        cons.setDossierMedical(dm);
-        consultationRepo.create(cons);
-        consId = cons.getId();
+    static void insertProcess() {
+        System.out.println("=== INSERT ===");
 
-        // 5. Actes [cite: 9]
-        Acte acte = new Acte();
-        acte.setLibelle("Détartrage");
-        acteRepo.create(acte);
+        System.out.println("PatientRepo = " + patientRepo);
+        System.out.println("AntecedentRepo = " + antecedentRepo);
+        System.out.println("CabinetRepo = " + cabinetRepo);
+        System.out.println("AgendaRepo = " + agendaRepo);
+        System.out.println("FactureRepo = " + factureRepo);
+    }
 
-        // 6. Situation Financière d'abord [cite: 19]
-        SituationFinanciere sf = new SituationFinanciere();
-        sf.setDossierMedical(dm);
-        sfRepo.create(sf);
+    static void selectProcess() {
+        System.out.println("=== SELECT ===");
 
-        // 7. Facture liée à la Situation Financière
-        Facture f = new Facture();
-        f.setSituationFinanciere(sf);
-        factureRepo.create(f);
+        System.out.println("Patients count = " + patientRepo.count());
+        System.out.println("Antecedents count = " + antecedentRepo.count());
+        System.out.println("Cabinets count = " + cabinetRepo.count());
+    }
 
-        // 8. Ordonnance & Certificat [cite: 10, 17]
-        Ordonnance ord = new Ordonnance();
-        ord.setDossierMedical(dm);
-        ordonnanceRepo.create(ord);
+    static void updateProcess() {
+        System.out.println("=== UPDATE ===");
+        // ici tu modifies un objet déjà créé
+    }
 
-        Certificat cert = new Certificat();
-        cert.setDossierMedical(dm);
-        certificatRepo.create(cert);
-
-        System.out.println("✅ Insertion terminée avec succès.");
+    static void deleteProcess() {
+        System.out.println("=== DELETE ===");
+        // suppression logique (ordre important)
     }
 
     public static void main(String[] args) {
-        TestRepo test = new TestRepo();
+
         try {
-            test.insertProcess();
-        } catch (Exception e) {
-            e.printStackTrace();
+            insertProcess();
+            selectProcess();
+            updateProcess();
+            deleteProcess();
         } finally {
-            if (SessionFactory.getInstance() != null) {
-                SessionFactory.getInstance().closeConnection();
-            }
+            // TOUJOURS fermer la connexion JDBC
+            SessionFactory.getInstance().closeConnection();
         }
     }
 }

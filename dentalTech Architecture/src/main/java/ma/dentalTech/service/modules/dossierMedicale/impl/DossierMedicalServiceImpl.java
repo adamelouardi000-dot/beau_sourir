@@ -3,7 +3,7 @@ package ma.dentalTech.service.modules.dossierMedicale.impl;
 import ma.dentalTech.entities.dossierMedical.*;
 import ma.dentalTech.entities.enums.StatutSituationFinanciere;
 import ma.dentalTech.repository.modules.dossierMedical.api.*;
-import ma.dentalTech.service.modules.dossierMedical.api.DossierMedicalService;
+import ma.dentalTech.service.modules.dossierMedicale.api.DossierMedicalService;
 
 import java.time.LocalDate;
 import java.util.List;

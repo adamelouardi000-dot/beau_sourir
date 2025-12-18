@@ -8,7 +8,7 @@ import ma.dentalTech.repository.modules.dossierMedical.api.ConsultationRepo;
 import ma.dentalTech.repository.modules.dossierMedical.api.InterventionMedecinRepo;
 import ma.dentalTech.repository.modules.dossierMedical.api.OrdonnanceRepo;
 import ma.dentalTech.repository.modules.dossierMedical.api.PrescriptionRepo;
-import ma.dentalTech.service.modules.dossierMedical.api.ConsultationService;
+import ma.dentalTech.service.modules.dossierMedicale.api.ConsultationService;
 
 import java.util.List;
 

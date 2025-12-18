@@ -19,7 +19,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public List<CabinetMedical> findAll() {
-        String sql = "SELECT * FROM CabinetMedical ORDER BY nom";
+        String sql = "SELECT * FROM Cabinets ORDER BY nom";
         List<CabinetMedical> out = new ArrayList<>();
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
@@ -33,7 +33,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public CabinetMedical findById(Long id) {
-        String sql = "SELECT * FROM CabinetMedical WHERE id = ?";
+        String sql = "SELECT * FROM Cabinets WHERE id = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -49,7 +49,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
     @Override
     public void create(CabinetMedical cab) {
         String sql = """
-            INSERT INTO CabinetMedical(
+            INSERT INTO Cabinets(
                 nom, adresse, email,
                 dateCreation, dateDerniereModification, creePar, modifiePar
             )
@@ -88,7 +88,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
     @Override
     public void update(CabinetMedical cab) {
         String sql = """
-            UPDATE CabinetMedical SET
+            UPDATE Cabinets SET
                 nom=?, adresse=?, email=?,
                 dateDerniereModification=?, creePar=?, modifiePar=?
             WHERE id=?
@@ -123,7 +123,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
         // enlever les relations avant suppression (si pas cascade)
         removeAllStaffFromCabinet(id);
 
-        String sql = "DELETE FROM CabinetMedical WHERE id = ?";
+        String sql = "DELETE FROM Cabinets WHERE id = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -137,7 +137,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public Optional<CabinetMedical> findByNom(String nom) {
-        String sql = "SELECT * FROM CabinetMedical WHERE nom = ?";
+        String sql = "SELECT * FROM Cabinets WHERE nom = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, nom);
@@ -152,7 +152,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public Optional<CabinetMedical> findByEmail(String email) {
-        String sql = "SELECT * FROM CabinetMedical WHERE email = ?";
+        String sql = "SELECT * FROM Cabinets WHERE email = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, email);
@@ -167,7 +167,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public List<CabinetMedical> searchByNomOrAdresse(String keyword) {
-        String sql = "SELECT * FROM CabinetMedical WHERE nom LIKE ? OR adresse LIKE ? ORDER BY nom";
+        String sql = "SELECT * FROM Cabinets WHERE nom LIKE ? OR adresse LIKE ? ORDER BY nom";
         List<CabinetMedical> out = new ArrayList<>();
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -199,7 +199,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public long count() {
-        String sql = "SELECT COUNT(*) FROM CabinetMedical";
+        String sql = "SELECT COUNT(*) FROM Cabinets";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -212,7 +212,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
 
     @Override
     public List<CabinetMedical> findPage(int limit, int offset) {
-        String sql = "SELECT * FROM CabinetMedical ORDER BY nom LIMIT ? OFFSET ?";
+        String sql = "SELECT * FROM Cabinets ORDER BY nom LIMIT ? OFFSET ?";
         List<CabinetMedical> out = new ArrayList<>();
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -293,7 +293,7 @@ public class CabinetMedicalRepositoryImpl implements CabinetMedicalRepository {
     public List<CabinetMedical> getCabinetsOfStaff(Long staffId) {
         String sql = """
             SELECT cm.*
-            FROM CabinetMedical cm
+            FROM Cabinets cm
             JOIN Cabinet_Staff cs ON cs.cabinet_id = cm.id
             WHERE cs.staff_id = ?
             ORDER BY cm.nom
