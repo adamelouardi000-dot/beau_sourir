@@ -1,20 +1,13 @@
 package ma.dentalTech.service.modules.auth.api;
 
-import ma.dentalTech.service.modules.auth.dto.*;
+public class CredentialsValidator {
 
-/**
- * Validation “fonctionnelle” des credentials AVANT d’aller au repository (login/password non vides, longueur min, etc.)
- */
-public interface CredentialsValidator {
+    public static boolean isValidEmail(String email) {
+        return email != null && email.matches("^[A-Za-z0-9+_.-]+@(.+)$");
+    }
 
-    /**
-     * Valide les données de login (format / non null / longueur...).
-     * Lève IllegalArgumentException si invalide.
-     */
-    void validate(AuthRequest request);
-
-    /**
-     * Valide les règles de complexité d'un nouveau mot de passe.
-     */
-    void validateNewPassword(String newPassword);
+    public static boolean isStrongPassword(String password) {
+        // Minimum 6 caractères pour le test
+        return password != null && password.length() >= 6;
+    }
 }
