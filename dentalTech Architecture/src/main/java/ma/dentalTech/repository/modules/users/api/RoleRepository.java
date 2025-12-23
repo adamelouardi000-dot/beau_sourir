@@ -21,4 +21,7 @@ public interface RoleRepository extends CrudRepository<Role, Long> {
     // à ajouter dans RoleRepository (repository layer)
     void assignRoleToUser(Long utilisateurId, Long roleId);
     void removeRoleFromUser(Long utilisateurId, Long roleId);
+    List<String> findPrivilegesByRoleId(Long roleId);
+
+    void clearPrivileges(Long roleId);
 }

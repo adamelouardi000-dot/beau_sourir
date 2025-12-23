@@ -2,6 +2,7 @@ package ma.dentalTech.repository.modules.agenda.impl;
 
 import ma.dentalTech.configuration.SessionFactory;
 import ma.dentalTech.entities.agenda.AgendaMensuel;
+import ma.dentalTech.entities.enums.Mois;
 import ma.dentalTech.repository.modules.agenda.api.AgendaMensuelRepository;
 
 import java.sql.*;
@@ -46,30 +47,27 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
 
     @Override
     public void create(AgendaMensuel a) {
-        // pas d'audit (car l'entity ne l'a pas)
         String sql = """
             INSERT INTO AgendaMensuels(medecin_id, mois, annee)
             VALUES (?,?,?)
             """;
 
+        if (a.getMois() == null) {
+            throw new RuntimeException("AgendaMensuel.mois est NULL (il faut set Mois.JANVIER etc.)");
+        }
+        if (a.getAnnee() == null) {
+            throw new RuntimeException("AgendaMensuel.annee est NULL");
+        }
+        if (a.getMedecinId() == null) {
+            throw new RuntimeException("AgendaMensuel.medecinId est NULL");
+        }
+
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            Long medecinId = extractLong(a, "getMedecinId");
-            if (medecinId == null) medecinId = extractNestedId(a, "getMedecin");
-            if (medecinId != null) ps.setLong(1, medecinId);
-            else ps.setNull(1, Types.BIGINT);
-
-            String mois = extractString(a, "getMois");
-            if (mois == null) {
-                Object enumMois = extractObject(a, "getMoisEnum");
-                mois = enumMois != null ? enumMois.toString() : null;
-            }
-            ps.setString(2, mois);
-
-            Integer annee = extractInt(a, "getAnnee");
-            if (annee != null) ps.setInt(3, annee);
-            else ps.setNull(3, Types.INTEGER);
+            ps.setLong(1, a.getMedecinId());
+            ps.setString(2, a.getMois().name());   // ✅ ENUM -> String
+            ps.setInt(3, a.getAnnee());
 
             ps.executeUpdate();
 
@@ -90,25 +88,17 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
             WHERE id=?
             """;
 
+        if (a.getId() == null) throw new RuntimeException("AgendaMensuel.id est NULL (update impossible)");
+        if (a.getMois() == null) throw new RuntimeException("AgendaMensuel.mois est NULL");
+        if (a.getAnnee() == null) throw new RuntimeException("AgendaMensuel.annee est NULL");
+        if (a.getMedecinId() == null) throw new RuntimeException("AgendaMensuel.medecinId est NULL");
+
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
 
-            Long medecinId = extractLong(a, "getMedecinId");
-            if (medecinId == null) medecinId = extractNestedId(a, "getMedecin");
-            if (medecinId != null) ps.setLong(1, medecinId);
-            else ps.setNull(1, Types.BIGINT);
-
-            String mois = extractString(a, "getMois");
-            if (mois == null) {
-                Object enumMois = extractObject(a, "getMoisEnum");
-                mois = enumMois != null ? enumMois.toString() : null;
-            }
-            ps.setString(2, mois);
-
-            Integer annee = extractInt(a, "getAnnee");
-            if (annee != null) ps.setInt(3, annee);
-            else ps.setNull(3, Types.INTEGER);
-
+            ps.setLong(1, a.getMedecinId());
+            ps.setString(2, a.getMois().name());   // ✅
+            ps.setInt(3, a.getAnnee());
             ps.setLong(4, a.getId());
 
             ps.executeUpdate();
@@ -159,7 +149,17 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
     @Override
     public List<AgendaMensuel> findByMedecin(Long medecinId) {
         String sql = "SELECT * FROM AgendaMensuels WHERE medecin_id=? ORDER BY annee DESC, mois DESC";
-        return findList(sql, ps -> ps.setLong(1, medecinId));
+        List<AgendaMensuel> out = new ArrayList<>();
+        try (Connection c = SessionFactory.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, medecinId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) out.add(mapAgenda(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return out;
     }
 
     // ================= Jours non disponibles =================
@@ -167,10 +167,10 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
     @Override
     public List<LocalDate> getJoursNonDisponibles(Long agendaId) {
         String sql = """
-            SELECT dateJour
-            FROM AgendaMensuel_JoursNonDisponibles
+            SELECT jour
+            FROM Agenda_JoursNonDisponibles
             WHERE agenda_id=?
-            ORDER BY dateJour
+            ORDER BY jour
             """;
         List<LocalDate> out = new ArrayList<>();
         try (Connection c = SessionFactory.getInstance().getConnection();
@@ -178,7 +178,7 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
             ps.setLong(1, agendaId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Date d = rs.getDate("dateJour");
+                    Date d = rs.getDate("jour");
                     if (d != null) out.add(d.toLocalDate());
                 }
             }
@@ -190,7 +190,7 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
 
     @Override
     public void addJourNonDisponible(Long agendaId, LocalDate date) {
-        String sql = "INSERT INTO AgendaMensuel_JoursNonDisponibles(agenda_id, dateJour) VALUES(?,?)";
+        String sql = "INSERT INTO Agenda_JoursNonDisponibles(agenda_id, jour) VALUES(?,?)";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, agendaId);
@@ -203,7 +203,7 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
 
     @Override
     public void removeJourNonDisponible(Long agendaId, LocalDate date) {
-        String sql = "DELETE FROM AgendaMensuel_JoursNonDisponibles WHERE agenda_id=? AND dateJour=?";
+        String sql = "DELETE FROM Agenda_JoursNonDisponibles WHERE agenda_id=? AND jour=?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, agendaId);
@@ -216,7 +216,7 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
 
     @Override
     public void clearJoursNonDisponibles(Long agendaId) {
-        String sql = "DELETE FROM AgendaMensuel_JoursNonDisponibles WHERE agenda_id=?";
+        String sql = "DELETE FROM Agenda_JoursNonDisponibles WHERE agenda_id=?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, agendaId);
@@ -226,96 +226,17 @@ public class AgendaMensuelRepositoryImpl implements AgendaMensuelRepository {
         }
     }
 
-    // ================= Helpers =================
-
-    private interface PsBinder { void bind(PreparedStatement ps) throws SQLException; }
-
-    private List<AgendaMensuel> findList(String sql, PsBinder binder) {
-        List<AgendaMensuel> out = new ArrayList<>();
-        try (Connection c = SessionFactory.getInstance().getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-            binder.bind(ps);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) out.add(mapAgenda(rs));
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return out;
-    }
+    // ================= Mapping =================
 
     private AgendaMensuel mapAgenda(ResultSet rs) throws SQLException {
         AgendaMensuel a = new AgendaMensuel();
-
         a.setId(rs.getLong("id"));
+        a.setMedecinId(rs.getLong("medecin_id"));
 
-        Long medecinId = safeGetLong(rs, "medecin_id");
-        if (medecinId != null) setIfExists(a, "setMedecinId", Long.class, medecinId);
+        String moisStr = rs.getString("mois");
+        if (moisStr != null) a.setMois(Mois.valueOf(moisStr)); // ✅ String -> ENUM
 
-        String mois = safeGetString(rs, "mois");
-        if (mois != null) setIfExists(a, "setMois", String.class, mois);
-
-        Integer annee = safeGetInt(rs, "annee");
-        if (annee != null) setIfExists(a, "setAnnee", Integer.class, annee);
-
+        a.setAnnee(rs.getInt("annee"));
         return a;
-    }
-
-    // ---- Reflection safe getters ----
-
-    private Object extractObject(Object obj, String getter) {
-        try { return obj.getClass().getMethod(getter).invoke(obj); }
-        catch (Exception e) { return null; }
-    }
-
-    private Long extractLong(Object obj, String getter) {
-        try { return (Long) obj.getClass().getMethod(getter).invoke(obj); }
-        catch (Exception e) { return null; }
-    }
-
-    private Integer extractInt(Object obj, String getter) {
-        try { return (Integer) obj.getClass().getMethod(getter).invoke(obj); }
-        catch (Exception e) { return null; }
-    }
-
-    private String extractString(Object obj, String getter) {
-        try { return (String) obj.getClass().getMethod(getter).invoke(obj); }
-        catch (Exception e) { return null; }
-    }
-
-    private Long extractNestedId(Object obj, String getter) {
-        try {
-            Object nested = obj.getClass().getMethod(getter).invoke(obj);
-            if (nested == null) return null;
-            Object id = nested.getClass().getMethod("getId").invoke(nested);
-            return (Long) id;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private void setIfExists(Object obj, String setter, Class<?> paramType, Object value) {
-        try { obj.getClass().getMethod(setter, paramType).invoke(obj, value); }
-        catch (Exception ignored) { }
-    }
-
-    // ---- ResultSet safe getters ----
-
-    private String safeGetString(ResultSet rs, String col) {
-        try { return rs.getString(col); } catch (SQLException e) { return null; }
-    }
-
-    private Long safeGetLong(ResultSet rs, String col) {
-        try {
-            long v = rs.getLong(col);
-            return rs.wasNull() ? null : v;
-        } catch (SQLException e) { return null; }
-    }
-
-    private Integer safeGetInt(ResultSet rs, String col) {
-        try {
-            int v = rs.getInt(col);
-            return rs.wasNull() ? null : v;
-        } catch (SQLException e) { return null; }
     }
 }

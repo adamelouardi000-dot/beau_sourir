@@ -33,15 +33,24 @@ public class ApplicationContext {
                 Object bean = createBean(className);
 
                 contextByName.put(beanName, bean);
-                context.put(bean.getClass(), bean);
 
-                // aussi mettre par interface si le bean implémente une seule interface “métier”
-                Class<?>[] interfaces = bean.getClass().getInterfaces();
-                for (Class<?> itf : interfaces) {
-                    // on ignore les interfaces Java standards
-                    if (itf.getName().startsWith("java.")) continue;
-                    context.putIfAbsent(itf, bean);
+// 1) Enregistrement par classe concrète
+                context.putIfAbsent(bean.getClass(), bean);
+
+// 2) Enregistrement par interfaces (AgendaMensuelService, RDVService, etc.)
+                for (Class<?> itf : bean.getClass().getInterfaces()) {
+                    if (!itf.getName().startsWith("java.")) {
+                        context.putIfAbsent(itf, bean);
+                    }
                 }
+
+// 3) Enregistrement par super-classes (sécurité supplémentaire)
+                Class<?> sup = bean.getClass().getSuperclass();
+                while (sup != null && sup != Object.class) {
+                    context.putIfAbsent(sup, bean);
+                    sup = sup.getSuperclass();
+                }
+
             }
 
             System.out.println("✅ ApplicationContext: " + contextByName.size() + " beans chargés.");

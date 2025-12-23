@@ -1,5 +1,6 @@
 package ma.dentalTech.repository.modules.users.api;
 
+import ma.dentalTech.entities.users.Role;
 import ma.dentalTech.entities.users.Utilisateur;
 import ma.dentalTech.repository.common.CrudRepository;
 
@@ -20,4 +21,6 @@ public interface UtilisateurRepository extends CrudRepository<Utilisateur, Long>
     List<String> getRoleLibellesOfUser(Long utilisateurId);
     void addRoleToUser(Long utilisateurId, Long roleId);
     void removeRoleFromUser(Long utilisateurId, Long roleId);
+
+    List<Role> findRolesByUserId(Long userId);;
 }

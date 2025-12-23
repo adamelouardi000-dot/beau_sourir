@@ -1,6 +1,7 @@
 package ma.dentalTech.repository.modules.users.impl;
 
 import ma.dentalTech.configuration.SessionFactory;
+import ma.dentalTech.entities.users.Role;
 import ma.dentalTech.entities.users.Utilisateur;
 import ma.dentalTech.repository.common.RowMappers;
 import ma.dentalTech.repository.modules.users.api.UtilisateurRepository;
@@ -273,4 +274,34 @@ public class UtilisateurRepositoryImpl implements UtilisateurRepository {
             ps.executeUpdate();
         } catch (SQLException e) { throw new RuntimeException(e); }
     }
+    @Override
+    public List<Role> findRolesByUserId(Long userId) {
+        String sql = """
+        SELECT r.*
+        FROM Roles r
+        INNER JOIN Utilisateur_Roles ur ON ur.role_id = r.id
+        WHERE ur.utilisateur_id = ?
+        """;
+        List<Role> out = new java.util.ArrayList<>();
+        try (java.sql.Connection c = SessionFactory.getInstance().getConnection();
+             java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    // ✅ remplace mapRole(rs) si tu as déjà un RowMapper Role
+                    Role r = new Role();
+                    r.setId(rs.getLong("id"));
+                    r.setLibelle(rs.getString("libelle"));
+                    r.setType(ma.dentalTech.entities.enums.RoleType.valueOf(rs.getString("type")));
+                    out.add(r);
+                }
+            }
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Erreur findRolesByUserId userId=" + userId, e);
+        }
+        return out;
+    }
+
+
+
 }

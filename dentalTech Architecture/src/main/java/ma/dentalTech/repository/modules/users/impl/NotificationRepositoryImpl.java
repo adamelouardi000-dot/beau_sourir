@@ -27,6 +27,43 @@ public class NotificationRepositoryImpl implements NotificationRepository {
         } catch (SQLException e) { throw new RuntimeException(e); }
         return out;
     }
+    @Override
+    public List<Notification> findByUserId(Long userId) {
+        String sql = """
+        SELECT * FROM Notifications
+        WHERE utilisateur_id=?
+        ORDER BY date DESC, time DESC
+        """;
+        List<Notification> out = new java.util.ArrayList<>();
+        try (java.sql.Connection c = SessionFactory.getInstance().getConnection();
+             java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Notification n = new Notification();
+                    n.setId(rs.getLong("id"));
+                    n.setTitre(ma.dentalTech.entities.enums.TitreNotification.valueOf(rs.getString("titre")));
+                    n.setMessage(rs.getString("message"));
+                    n.setDate(rs.getDate("date").toLocalDate());
+                    n.setTime(rs.getTime("time").toLocalTime());
+                    n.setType(ma.dentalTech.entities.enums.TypeNotification.valueOf(rs.getString("type")));
+                    n.setPriorite(ma.dentalTech.entities.enums.PrioriteNotification.valueOf(rs.getString("priorite")));
+                    n.setLue(rs.getBoolean("lue"));
+
+                    // ⚠️ si Notification a un champ Utilisateur (pas utilisateurId)
+                    ma.dentalTech.entities.users.Utilisateur u = new ma.dentalTech.entities.users.Utilisateur();
+                    u.setId(rs.getLong("utilisateur_id"));
+                    n.setUtilisateur(u);
+
+                    out.add(n);
+                }
+            }
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Erreur findByUserId userId=" + userId, e);
+        }
+        return out;
+    }
+
 
     @Override
     public Notification findById(Long id) {

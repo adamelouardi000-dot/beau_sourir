@@ -28,6 +28,37 @@ public class RoleRepositoryImpl implements RoleRepository {
         } catch (SQLException e) { throw new RuntimeException(e); }
         return out;
     }
+    @Override
+    public List<String> findPrivilegesByRoleId(Long roleId) {
+        String sql = "SELECT privilege FROM Role_Privileges WHERE role_id=? ORDER BY privilege";
+        List<String> out = new java.util.ArrayList<>();
+        try (java.sql.Connection c = SessionFactory.getInstance().getConnection();
+             java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, roleId);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) out.add(rs.getString("privilege"));
+            }
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Erreur findPrivilegesByRoleId roleId=" + roleId, e);
+        }
+        return out;
+    }
+
+
+
+
+    @Override
+    public void clearPrivileges(Long roleId) {
+        String sql = "DELETE FROM Role_Privileges WHERE role_id=?";
+        try (java.sql.Connection c = SessionFactory.getInstance().getConnection();
+             java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, roleId);
+            ps.executeUpdate();
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Erreur clearPrivileges roleId=" + roleId, e);
+        }
+    }
+
 
     @Override
     public Role findById(Long id) {

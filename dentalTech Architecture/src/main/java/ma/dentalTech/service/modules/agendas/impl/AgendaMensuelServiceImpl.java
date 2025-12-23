@@ -1,9 +1,9 @@
 package ma.dentalTech.service.modules.agendas.impl;
 
 import ma.dentalTech.entities.agenda.AgendaMensuel;
-import ma.dentalTech.entities.enums.Mois;
 import ma.dentalTech.repository.modules.agenda.api.AgendaMensuelRepository;
 import ma.dentalTech.service.modules.agendas.api.AgendaMensuelService;
+import ma.dentalTech.mvc.dto.*;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -11,93 +11,151 @@ import java.util.Optional;
 
 public class AgendaMensuelServiceImpl implements AgendaMensuelService {
 
-    private final AgendaMensuelRepository agendaRepo;
+    private final AgendaMensuelRepository repo;
 
-    public AgendaMensuelServiceImpl(AgendaMensuelRepository agendaRepo) {
-        this.agendaRepo = agendaRepo;
+    public AgendaMensuelServiceImpl(AgendaMensuelRepository repo) {
+        this.repo = repo;
+    }
+
+    // ---------------- CRUD ----------------
+
+    @Override
+    public List<AgendaMensuelDto> findAll() {
+        return repo.findAll().stream().map(this::toDto).toList();
     }
 
     @Override
-    public List<AgendaMensuel> findAll() {
-        return agendaRepo.findAll();
+    public AgendaMensuelDto findById(Long id) {
+        AgendaMensuel a = repo.findById(id);
+        if (a == null) throw new RuntimeException("AgendaMensuel introuvable id=" + id);
+        return toDto(a);
     }
 
     @Override
-    public AgendaMensuel findById(Long id) {
-        if (id == null) throw new IllegalArgumentException("id ne doit pas être null");
-        AgendaMensuel a = agendaRepo.findById(id);
-        if (a == null) throw new IllegalArgumentException("Agenda introuvable (id=" + id + ")");
-        return a;
-    }
+    public AgendaMensuelDto create(AgendaMensuelCreateRequest request) {
+        validateCreate(request);
 
-    @Override
-    public void create(AgendaMensuel agenda) {
-        if (agenda == null) throw new IllegalArgumentException("agenda ne doit pas être null");
-        if (agenda.getMedecinId() == null) throw new IllegalArgumentException("medecinId obligatoire");
-        if (agenda.getMois() == null) throw new IllegalArgumentException("mois obligatoire");
-        if (agenda.getAnnee() == null) throw new IllegalArgumentException("annee obligatoire");
+        AgendaMensuel a = new AgendaMensuel();
+        a.setMedecinId(request.medecinId());
+        a.setMois(request.mois());
+        a.setAnnee(request.annee());
 
-        // éviter doublon (même médecin / mois / année)
-        Optional<AgendaMensuel> existing =
-                agendaRepo.findByMedecinAndMoisAndAnnee(agenda.getMedecinId(), agenda.getMois().name(), agenda.getAnnee());
-        if (existing.isPresent()) {
-            throw new IllegalArgumentException("Agenda déjà existant pour ce médecin/mois/année");
+        repo.create(a);
+
+        // jours non dispo stockés séparément (table d’association)
+        if (request.medecinId() != null) {
+            // rien ici
         }
 
-        agendaRepo.create(agenda);
+        // recharger jours non dispo pour retour DTO
+        a.setJoursNonDisponibles(repo.getJoursNonDisponibles(a.getId()));
+        return toDto(a);
     }
 
     @Override
-    public void update(AgendaMensuel agenda) {
-        if (agenda == null) throw new IllegalArgumentException("agenda ne doit pas être null");
-        if (agenda.getId() == null) throw new IllegalArgumentException("id obligatoire pour update");
-        AgendaMensuel old = agendaRepo.findById(agenda.getId());
-        if (old == null) throw new IllegalArgumentException("Agenda introuvable (id=" + agenda.getId() + ")");
-        agendaRepo.update(agenda);
+    public AgendaMensuelDto update(AgendaMensuelUpdateRequest request) {
+        validateUpdate(request);
+
+        AgendaMensuel existing = repo.findById(request.id());
+        if (existing == null) throw new RuntimeException("AgendaMensuel introuvable id=" + request.id());
+
+        existing.setMedecinId(request.medecinId());
+        existing.setMois(request.mois());
+        existing.setAnnee(request.annee());
+
+        repo.update(existing);
+
+        existing.setJoursNonDisponibles(repo.getJoursNonDisponibles(existing.getId()));
+        return toDto(existing);
     }
 
     @Override
     public void deleteById(Long id) {
-        if (id == null) throw new IllegalArgumentException("id ne doit pas être null");
-        agendaRepo.deleteById(id);
+        repo.deleteById(id);
+    }
+
+    // ---------------- Recherche ----------------
+
+    @Override
+    public Optional<AgendaMensuelDto> findByMedecinAndMoisAndAnnee(AgendaMensuelSearchRequest request) {
+        if (request == null) throw new IllegalArgumentException("SearchRequest null");
+        if (request.medecinId() == null) throw new IllegalArgumentException("medecinId obligatoire");
+        if (request.mois() == null) throw new IllegalArgumentException("mois obligatoire");
+        if (request.annee() == null) throw new IllegalArgumentException("annee obligatoire");
+
+        return repo.findByMedecinAndMoisAndAnnee(
+                request.medecinId(),
+                request.mois().name(),
+                request.annee()
+        ).map(a -> {
+            a.setJoursNonDisponibles(repo.getJoursNonDisponibles(a.getId()));
+            return toDto(a);
+        });
     }
 
     @Override
-    public Optional<AgendaMensuel> findByMedecinAndMoisAndAnnee(Long medecinId, Mois mois, int annee) {
-        if (medecinId == null) throw new IllegalArgumentException("medecinId ne doit pas être null");
-        if (mois == null) throw new IllegalArgumentException("mois ne doit pas être null");
-        return agendaRepo.findByMedecinAndMoisAndAnnee(medecinId, mois.name(), annee);
+    public List<AgendaMensuelDto> findByMedecin(Long medecinId) {
+        if (medecinId == null) throw new IllegalArgumentException("medecinId obligatoire");
+        return repo.findByMedecin(medecinId).stream().map(a -> {
+            a.setJoursNonDisponibles(repo.getJoursNonDisponibles(a.getId()));
+            return toDto(a);
+        }).toList();
     }
 
-    @Override
-    public List<AgendaMensuel> findByMedecin(Long medecinId) {
-        if (medecinId == null) throw new IllegalArgumentException("medecinId ne doit pas être null");
-        return agendaRepo.findByMedecin(medecinId);
-    }
+    // ---------------- Jours non disponibles ----------------
 
     @Override
     public List<LocalDate> getJoursNonDisponibles(Long agendaId) {
-        if (agendaId == null) throw new IllegalArgumentException("agendaId ne doit pas être null");
-        return agendaRepo.getJoursNonDisponibles(agendaId);
+        if (agendaId == null) throw new IllegalArgumentException("agendaId obligatoire");
+        return repo.getJoursNonDisponibles(agendaId);
     }
 
     @Override
     public void addJourNonDisponible(Long agendaId, LocalDate date) {
-        if (agendaId == null) throw new IllegalArgumentException("agendaId ne doit pas être null");
-        if (date == null) throw new IllegalArgumentException("date ne doit pas être null");
-        agendaRepo.addJourNonDisponible(agendaId, date);
+        if (agendaId == null) throw new IllegalArgumentException("agendaId obligatoire");
+        if (date == null) throw new IllegalArgumentException("date obligatoire");
+        repo.addJourNonDisponible(agendaId, date);
     }
 
     @Override
     public void removeJourNonDisponible(Long agendaId, LocalDate date) {
-        if (agendaId == null) throw new IllegalArgumentException("agendaId ne doit pas être null");
-        if (date == null) throw new IllegalArgumentException("date ne doit pas être null");
-        agendaRepo.removeJourNonDisponible(agendaId, date);
+        if (agendaId == null) throw new IllegalArgumentException("agendaId obligatoire");
+        if (date == null) throw new IllegalArgumentException("date obligatoire");
+        repo.removeJourNonDisponible(agendaId, date);
     }
 
     @Override
     public void clearJoursNonDisponibles(Long agendaId) {
-        if (agendaId == null) throw new IllegalArgumentException("agendaId ne doit pas être null");
-        agendaRepo.clearJoursNonDisponibles(agendaId);
+        if (agendaId == null) throw new IllegalArgumentException("agendaId obligatoire");
+        repo.clearJoursNonDisponibles(agendaId);
+    }
+
+    // ---------------- Mapping ----------------
+
+    private AgendaMensuelDto toDto(AgendaMensuel a) {
+        return new AgendaMensuelDto(
+                a.getId(),
+                a.getMedecinId(),
+                a.getMois(),
+                a.getAnnee(),
+                a.getJoursNonDisponibles()
+        );
+    }
+
+    // ---------------- Validation ----------------
+
+    private void validateCreate(AgendaMensuelCreateRequest r) {
+        if (r == null) throw new IllegalArgumentException("CreateRequest null");
+        if (r.medecinId() == null) throw new IllegalArgumentException("medecinId obligatoire");
+        if (r.mois() == null) throw new IllegalArgumentException("mois obligatoire");
+        if (r.annee() == null) throw new IllegalArgumentException("annee obligatoire");
+    }
+
+    private void validateUpdate(AgendaMensuelUpdateRequest r) {
+        if (r == null) throw new IllegalArgumentException("UpdateRequest null");
+        if (r.id() == null) throw new IllegalArgumentException("id obligatoire");
+        if (r.medecinId() == null) throw new IllegalArgumentException("medecinId obligatoire");
+        if (r.mois() == null) throw new IllegalArgumentException("mois obligatoire");
+        if (r.annee() == null) throw new IllegalArgumentException("annee obligatoire");
     }
 }

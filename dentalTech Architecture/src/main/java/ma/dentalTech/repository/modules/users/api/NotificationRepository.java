@@ -21,4 +21,5 @@ public interface NotificationRepository extends CrudRepository<Notification, Lon
 
     void markAsRead(Long notificationId);
     void markAllAsReadForUser(Long utilisateurId);
+    List<Notification> findByUserId(Long userId);
 }
