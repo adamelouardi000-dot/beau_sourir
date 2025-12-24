@@ -1,7 +1,15 @@
 package ma.dentalTech.service.modules.auth.api;
 
-import ma.dentalTech.service.modules.auth.dto.AuthRequest;
+import ma.dentalTech.mvc.dto.AuthResponse;
+import ma.dentalTech.mvc.dto.LoginRequest;
+import ma.dentalTech.mvc.dto.RegisterRequest;
+import ma.dentalTech.mvc.dto.UserResponse;
 
 public interface AuthService {
-    boolean authenticate(AuthRequest request);
+
+    AuthResponse login(LoginRequest request);
+
+    UserResponse register(RegisterRequest request);
+
+    void changePassword(Long userId, String oldPassword, String newPassword);
 }

@@ -9,6 +9,9 @@ public class ApplicationContext {
     private static final Map<Class<?>, Object> context = new HashMap<>();
     private static final Map<String, Object> contextByName = new HashMap<>();
 
+    // Pour éviter la récursion / cycles simples
+    private static final Set<String> creating = new HashSet<>();
+
     static {
         loadBeans("config/beans.properties");
     }
@@ -23,7 +26,7 @@ public class ApplicationContext {
             Properties props = new Properties();
             props.load(configFile);
 
-            // 1) On garde l’ordre: d’abord repos, ensuite services, ensuite controllers (plus tard)
+            // 1) ordre: repos -> services -> controllers
             List<String> keys = new ArrayList<>(props.stringPropertyNames());
             keys.sort(Comparator.comparingInt(ApplicationContext::beanPriority));
 
@@ -34,23 +37,22 @@ public class ApplicationContext {
 
                 contextByName.put(beanName, bean);
 
-// 1) Enregistrement par classe concrète
+                // 1) Enregistrement par classe concrète
                 context.putIfAbsent(bean.getClass(), bean);
 
-// 2) Enregistrement par interfaces (AgendaMensuelService, RDVService, etc.)
+                // 2) Enregistrement par interfaces
                 for (Class<?> itf : bean.getClass().getInterfaces()) {
                     if (!itf.getName().startsWith("java.")) {
                         context.putIfAbsent(itf, bean);
                     }
                 }
 
-// 3) Enregistrement par super-classes (sécurité supplémentaire)
+                // 3) Enregistrement par super-classes
                 Class<?> sup = bean.getClass().getSuperclass();
                 while (sup != null && sup != Object.class) {
                     context.putIfAbsent(sup, bean);
                     sup = sup.getSuperclass();
                 }
-
             }
 
             System.out.println("✅ ApplicationContext: " + contextByName.size() + " beans chargés.");
@@ -59,7 +61,6 @@ public class ApplicationContext {
         }
     }
 
-    // repo d’abord, service ensuite, controller après
     private static int beanPriority(String key) {
         String k = key.toLowerCase(Locale.ROOT);
         if (k.contains("repo") || k.contains("repository") || k.contains("dao")) return 1;
@@ -69,41 +70,55 @@ public class ApplicationContext {
     }
 
     private static Object createBean(String className) throws Exception {
+        if (creating.contains(className)) {
+            // cycle détecté : on stoppe net avec message clair
+            throw new RuntimeException("Cycle de dépendances détecté avec: " + className);
+        }
+
         Class<?> clazz = Class.forName(className);
 
-        // si déjà créé
+        // si déjà créé (par nom)
         for (Object existing : contextByName.values()) {
             if (clazz.isInstance(existing)) return existing;
         }
 
-        Constructor<?>[] ctors = clazz.getDeclaredConstructors();
-        // choisir constructeur avec le plus de paramètres (souvent celui avec injection)
-        Arrays.sort(ctors, (a, b) -> Integer.compare(b.getParameterCount(), a.getParameterCount()));
+        creating.add(className);
 
-        for (Constructor<?> ctor : ctors) {
-            Class<?>[] paramTypes = ctor.getParameterTypes();
-            Object[] args = new Object[paramTypes.length];
+        try {
+            Constructor<?>[] ctors = clazz.getDeclaredConstructors();
+            Arrays.sort(ctors, (a, b) -> Integer.compare(b.getParameterCount(), a.getParameterCount()));
 
-            boolean ok = true;
-            for (int i = 0; i < paramTypes.length; i++) {
-                Object dep = getBean(paramTypes[i]);
-                if (dep == null) {
-                    ok = false;
-                    break;
+            for (Constructor<?> ctor : ctors) {
+                Class<?>[] paramTypes = ctor.getParameterTypes();
+                Object[] args = new Object[paramTypes.length];
+
+                boolean ok = true;
+                for (int i = 0; i < paramTypes.length; i++) {
+                    Object dep = getBean(paramTypes[i]);
+                    if (dep == null) {
+                        ok = false;
+                        break;
+                    }
+                    args[i] = dep;
                 }
-                args[i] = dep;
+
+                if (ok) {
+                    ctor.setAccessible(true);
+                    return ctor.newInstance(args);
+                }
             }
 
-            if (ok) {
-                ctor.setAccessible(true);
-                return ctor.newInstance(args);
+            // fallback: constructeur vide si existe
+            try {
+                Constructor<?> noArg = clazz.getDeclaredConstructor();
+                noArg.setAccessible(true);
+                return noArg.newInstance();
+            } catch (NoSuchMethodException ex) {
+                throw new RuntimeException("Aucun constructeur injectable trouvé pour: " + className);
             }
+        } finally {
+            creating.remove(className);
         }
-
-        // fallback: constructeur vide
-        Constructor<?> noArg = clazz.getDeclaredConstructor();
-        noArg.setAccessible(true);
-        return noArg.newInstance();
     }
 
     public static Object getBean(String beanName) {
@@ -113,12 +128,12 @@ public class ApplicationContext {
     public static <T> T getBean(Class<T> beanClass) {
         Object bean = context.get(beanClass);
 
-        // si pas trouvé exact, chercher un bean assignable
-        if (bean == null) {
-            for (Object b : context.values()) {
-                if (beanClass.isInstance(b)) return beanClass.cast(b);
-            }
+        if (bean != null) return beanClass.cast(bean);
+
+        // chercher assignable
+        for (Object b : context.values()) {
+            if (beanClass.isInstance(b)) return beanClass.cast(b);
         }
-        return beanClass.cast(bean);
+        return null; // ✅ IMPORTANT
     }
 }

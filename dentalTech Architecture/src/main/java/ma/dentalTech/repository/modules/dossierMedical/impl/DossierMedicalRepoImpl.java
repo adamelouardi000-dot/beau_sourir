@@ -14,11 +14,14 @@ import java.util.Optional;
 @SuppressWarnings("unused")
 public class DossierMedicalRepoImpl implements DossierMedicalRepo {
 
+    // ✅ NOM TABLE BD (selon ton script SQL)
+    private static final String TABLE = "DossiersMedicaux";
+
     // ---------------- CRUD ----------------
 
     @Override
     public List<DossierMedical> findAll() {
-        String sql = "SELECT * FROM DossierMedical ORDER BY dateCreation DESC";
+        String sql = "SELECT * FROM " + TABLE + " ORDER BY dateCreation DESC";
         List<DossierMedical> out = new ArrayList<>();
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
@@ -32,7 +35,7 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
 
     @Override
     public DossierMedical findById(Long id) {
-        String sql = "SELECT * FROM DossierMedical WHERE id = ?";
+        String sql = "SELECT * FROM " + TABLE + " WHERE id = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -48,33 +51,50 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
     @Override
     public void create(DossierMedical d) {
         String sql = """
-            INSERT INTO DossierMedical(
+            INSERT INTO %s(
                 patient_id,
+                medecin_id,
+                dateOuverture,
+                noteGenerale,
                 dateCreation,
                 dateDerniereModification,
                 creePar,
                 modifiePar
             )
-            VALUES (?,?,?,?,?)
-            """;
+            VALUES (?,?,?,?,?,?,?,?)
+            """.formatted(TABLE);
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            Long patientId = extractPatientId(d);
+            // patient_id
+            Long patientId = extractIdByReflection(d, "getPatientId", "getPatient");
             if (patientId != null) ps.setLong(1, patientId);
             else ps.setNull(1, Types.BIGINT);
 
+            // medecin_id
+            Long medecinId = extractIdByReflection(d, "getMedecinId", "getMedecin");
+            if (medecinId != null) ps.setLong(2, medecinId);
+            else ps.setNull(2, Types.BIGINT);
+
+            LocalDate dateOuverture = readLocalDate(d, "getDateOuverture");
+            if (dateOuverture == null) dateOuverture = LocalDate.now();
+            ps.setDate(3, Date.valueOf(dateOuverture));
+            writeLocalDate(d, "setDateOuverture", dateOuverture);
+
+            String noteGenerale = readString(d, "getNoteGenerale");
+            ps.setString(4, noteGenerale);
+
             LocalDate dc = d.getDateCreation() != null ? d.getDateCreation() : LocalDate.now();
-            ps.setDate(2, Date.valueOf(dc));
+            ps.setDate(5, Date.valueOf(dc));
             d.setDateCreation(dc);
 
             LocalDateTime dm = d.getDateDerniereModification() != null ? d.getDateDerniereModification() : LocalDateTime.now();
-            ps.setTimestamp(3, Timestamp.valueOf(dm));
+            ps.setTimestamp(6, Timestamp.valueOf(dm));
             d.setDateDerniereModification(dm);
 
-            ps.setString(4, d.getCreePar());
-            ps.setString(5, d.getModifiePar());
+            ps.setString(7, d.getCreePar());
+            ps.setString(8, d.getModifiePar());
 
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -89,29 +109,42 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
     @Override
     public void update(DossierMedical d) {
         String sql = """
-            UPDATE DossierMedical SET
+            UPDATE %s SET
                 patient_id=?,
+                medecin_id=?,
+                dateOuverture=?,
+                noteGenerale=?,
                 dateCreation=?,
                 dateDerniereModification=?,
                 creePar=?,
                 modifiePar=?
             WHERE id=?
-            """;
+            """.formatted(TABLE);
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
 
-            Long patientId = extractPatientId(d);
+            Long patientId = extractIdByReflection(d, "getPatientId", "getPatient");
             if (patientId != null) ps.setLong(1, patientId);
             else ps.setNull(1, Types.BIGINT);
 
-            LocalDate dc = d.getDateCreation() != null ? d.getDateCreation() : LocalDate.now();
-            ps.setDate(2, Date.valueOf(dc));
+            Long medecinId = extractIdByReflection(d, "getMedecinId", "getMedecin");
+            if (medecinId != null) ps.setLong(2, medecinId);
+            else ps.setNull(2, Types.BIGINT);
 
-            ps.setTimestamp(3, Timestamp.valueOf(LocalDateTime.now()));
-            ps.setString(4, d.getCreePar());
-            ps.setString(5, d.getModifiePar());
-            ps.setLong(6, d.getId());
+            LocalDate dateOuverture = readLocalDate(d, "getDateOuverture");
+            if (dateOuverture == null) dateOuverture = LocalDate.now();
+            ps.setDate(3, Date.valueOf(dateOuverture));
+
+            ps.setString(4, readString(d, "getNoteGenerale"));
+
+            LocalDate dc = d.getDateCreation() != null ? d.getDateCreation() : LocalDate.now();
+            ps.setDate(5, Date.valueOf(dc));
+
+            ps.setTimestamp(6, Timestamp.valueOf(LocalDateTime.now()));
+            ps.setString(7, d.getCreePar());
+            ps.setString(8, d.getModifiePar());
+            ps.setLong(9, d.getId());
 
             ps.executeUpdate();
 
@@ -127,7 +160,7 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
 
     @Override
     public void deleteById(Long id) {
-        String sql = "DELETE FROM DossierMedical WHERE id = ?";
+        String sql = "DELETE FROM " + TABLE + " WHERE id = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -141,7 +174,7 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
 
     @Override
     public Optional<DossierMedical> findByPatient(Long patientId) {
-        String sql = "SELECT * FROM DossierMedical WHERE patient_id = ?";
+        String sql = "SELECT * FROM " + TABLE + " WHERE patient_id = ?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, patientId);
@@ -156,34 +189,26 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
 
     @Override
     public List<DossierMedical> findByDateCreationAfter(LocalDate date) {
-        String sql = "SELECT * FROM DossierMedical WHERE dateCreation > ? ORDER BY dateCreation DESC";
+        String sql = "SELECT * FROM " + TABLE + " WHERE dateCreation > ? ORDER BY dateCreation DESC";
         return findList(sql, ps -> ps.setDate(1, Date.valueOf(date)));
     }
 
     @Override
     public List<DossierMedical> findByActif(boolean actif) {
-        String sql = "SELECT * FROM DossierMedical WHERE actif = ? ORDER BY dateCreation DESC";
-        return findList(sql, ps -> ps.setBoolean(1, actif));
+        // ⚠️ ta table DossiersMedicaux n'a pas "actif" dans ton SQL
+        // on renvoie juste tout (ou tu peux supprimer cette méthode de l'interface si tu veux)
+        return findAll();
     }
 
     @Override
     public Optional<DossierMedical> findByNumero(String numero) {
-        String sql = "SELECT * FROM DossierMedical WHERE numero = ?";
-        try (Connection c = SessionFactory.getInstance().getConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, numero);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return Optional.of(mapDossierMedical(rs));
-                return Optional.empty();
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        // ⚠️ ta table DossiersMedicaux n'a pas "numero" dans ton SQL
+        return Optional.empty();
     }
 
     @Override
     public List<DossierMedical> findPage(int limit, int offset) {
-        String sql = "SELECT * FROM DossierMedical ORDER BY dateCreation DESC LIMIT ? OFFSET ?";
+        String sql = "SELECT * FROM " + TABLE + " ORDER BY dateCreation DESC LIMIT ? OFFSET ?";
         return findList(sql, ps -> {
             ps.setInt(1, limit);
             ps.setInt(2, offset);
@@ -222,26 +247,85 @@ public class DossierMedicalRepoImpl implements DossierMedicalRepo {
         d.setCreePar(rs.getString("creePar"));
         d.setModifiePar(rs.getString("modifiePar"));
 
+        // patient_id -> setPatientId(Long) si existe
         long patientId = rs.getLong("patient_id");
         if (!rs.wasNull()) {
-            try {
-                // si tu as un setter setPatientId(Long) dans l'entity, on le remplit
-                var m = d.getClass().getMethod("setPatientId", Long.class);
-                m.invoke(d, patientId);
-            } catch (Exception ignored) {
-                // sinon on laisse patient null (le service pourra hydrater le patient si besoin)
-            }
+            invokeIfExists(d, "setPatientId", Long.class, patientId);
         }
+
+        // medecin_id -> setMedecinId(Long) si existe
+        long medecinId = rs.getLong("medecin_id");
+        if (!rs.wasNull()) {
+            invokeIfExists(d, "setMedecinId", Long.class, medecinId);
+        }
+
+        Date douv = rs.getDate("dateOuverture");
+        if (douv != null) {
+            invokeIfExists(d, "setDateOuverture", LocalDate.class, douv.toLocalDate());
+        }
+
+        String note = rs.getString("noteGenerale");
+        invokeIfExists(d, "setNoteGenerale", String.class, note);
 
         return d;
     }
 
-    private Long extractPatientId(DossierMedical d) {
+    // ---------- Reflection helpers (safe) ----------
+
+    private void invokeIfExists(Object target, String method, Class<?> paramType, Object value) {
         try {
-            var p = d.getPatient();
-            if (p == null) return null;
-            return p.getId();
-        } catch (Exception e) {
+            var m = target.getClass().getMethod(method, paramType);
+            m.invoke(target, value);
+        } catch (Exception ignored) { }
+    }
+
+    private Long extractIdByReflection(DossierMedical d, String getterIdName, String getterObjectName) {
+        try {
+            // 1) getXxxId()
+            var mid = d.getClass().getMethod(getterIdName);
+            Object v = mid.invoke(d);
+            if (v instanceof Long l) return l;
+
+        } catch (Exception ignored) { }
+
+        try {
+            // 2) getXxx().getId()
+            var mo = d.getClass().getMethod(getterObjectName);
+            Object obj = mo.invoke(d);
+            if (obj == null) return null;
+
+            var getId = obj.getClass().getMethod("getId");
+            Object id = getId.invoke(obj);
+            if (id instanceof Long l) return l;
+
+        } catch (Exception ignored) { }
+
+        return null;
+    }
+
+    private LocalDate readLocalDate(Object target, String getter) {
+        try {
+            var m = target.getClass().getMethod(getter);
+            Object v = m.invoke(target);
+            return (LocalDate) v;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void writeLocalDate(Object target, String setter, LocalDate value) {
+        try {
+            var m = target.getClass().getMethod(setter, LocalDate.class);
+            m.invoke(target, value);
+        } catch (Exception ignored) { }
+    }
+
+    private String readString(Object target, String getter) {
+        try {
+            var m = target.getClass().getMethod(getter);
+            Object v = m.invoke(target);
+            return (String) v;
+        } catch (Exception ignored) {
             return null;
         }
     }
