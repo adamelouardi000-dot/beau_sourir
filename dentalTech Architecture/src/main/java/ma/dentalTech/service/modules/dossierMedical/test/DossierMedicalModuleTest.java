@@ -1,12 +1,16 @@
 package ma.dentalTech.service.modules.dossierMedical.test;
 
 import ma.dentalTech.configuration.ApplicationContext;
+import ma.dentalTech.configuration.SessionFactory;
 import ma.dentalTech.mvc.dto.*;
 import ma.dentalTech.service.modules.dossierMedical.api.ConsultationService;
 import ma.dentalTech.service.modules.dossierMedical.api.DossierMedicalService;
 import ma.dentalTech.service.modules.dossierMedical.api.OrdonnanceService;
 import ma.dentalTech.service.modules.dossierMedical.api.PrescriptionService;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.List;
 
 public class DossierMedicalModuleTest {
@@ -32,23 +36,27 @@ public class DossierMedicalModuleTest {
         System.out.println("✅ OrdonnanceService    : " + ordonnanceService.getClass().getSimpleName());
         System.out.println("✅ PrescriptionService  : " + prescriptionService.getClass().getSimpleName());
 
-        // 2) Choisir un patientId existant dans ta BD (modifie si besoin)
-        Long patientId = 1L;
+        // 2) Récupérer un patientId EXISTANT (sinon FK error)
+        Long patientId = pickExistingPatientId();
+        if (patientId == null) {
+            System.err.println("❌ Aucun patient trouvé dans la table Patients.");
+            System.err.println("➡️ Ajoute d'abord un patient (seed.sql ou insertion manuelle) puis relance le test.");
+            return;
+        }
+        System.out.println("✅ PatientId utilisé -> " + patientId);
 
-        // 3) CREATE DOSSIER MEDICAL
+        // 3) CREATE / GET DOSSIER MEDICAL
         DossierMedicalDto dm;
         try {
             dm = dossierService.create(new DossierMedicalCreateRequest(patientId));
             System.out.println("✅ DOSSIER CREATED -> id=" + dm.id() + " patientId=" + dm.patientId());
         } catch (Exception e) {
             System.out.println("⚠️ DOSSIER CREATE -> " + e.getMessage());
-            // Si déjà existant, on le récupère
             try {
                 dm = dossierService.getByPatientId(patientId);
                 System.out.println("✅ DOSSIER FOUND -> id=" + dm.id() + " patientId=" + dm.patientId());
             } catch (Exception ex) {
                 System.err.println("❌ DOSSIER NOT FOUND -> " + ex.getMessage());
-                System.err.println("➡️ Mets un patientId qui existe dans ta BD.");
                 return;
             }
         }
@@ -58,8 +66,8 @@ public class DossierMedicalModuleTest {
         try {
             ConsultationCreateRequest cReq = new ConsultationCreateRequest(
                     dm.id(),
-                    "Controle",                 // motif (si ton entity n’a pas motif, le service mettra null)
-                    "Douleur légère molaire"     // observation
+                    "Controle",
+                    "Douleur légère molaire"
             );
 
             consultation = consultationService.create(cReq);
@@ -94,7 +102,7 @@ public class DossierMedicalModuleTest {
 
             prescription = prescriptionService.create(pReq);
             System.out.println("✅ PRESCRIPTION CREATED -> id=" + prescription.id()
-                    + " med=" + prescription.medicament()
+                    + " medicament=" + prescription.medicament()
                     + " duree=" + prescription.duree());
 
         } catch (Exception e) {
@@ -115,5 +123,20 @@ public class DossierMedicalModuleTest {
         }
 
         System.out.println("========== FIN TEST DOSSIER MEDICAL ==========");
+    }
+
+    private static Long pickExistingPatientId() {
+        String sql = "SELECT id FROM Patients ORDER BY id ASC LIMIT 1";
+        try (Connection c = SessionFactory.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            if (rs.next()) return rs.getLong(1);
+            return null;
+
+        } catch (Exception e) {
+            System.err.println("❌ Impossible de lire Patients : " + e.getMessage());
+            return null;
+        }
     }
 }

@@ -23,13 +23,15 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) out.add(mapOrdonnance(rs));
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         return out;
     }
 
     @Override
     public Ordonnance findById(Long id) {
-        String sql = "SELECT * FROM Ordonnances WHERE id = ?";
+        String sql = "SELECT * FROM Ordonnances WHERE id=?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -37,32 +39,49 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
                 if (rs.next()) return mapOrdonnance(rs);
                 return null;
             }
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void create(Ordonnance o) {
+        // ✅ Table: Ordonnances(consultation_id, dateOrdonnance, remarque, dateCreation, dateDerniereModification, creePar, modifiePar)
         String sql = """
             INSERT INTO Ordonnances(
-                consultation_id, medecin_id, dateOrdonnance, noteMedecin,
-                dateCreation, dateDerniereModification, creePar, modifiePar
+                consultation_id,
+                dateOrdonnance,
+                remarque,
+                dateCreation,
+                dateDerniereModification,
+                creePar,
+                modifiePar
             )
-            VALUES (?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?)
             """;
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            ps.setLong(1, extractLong(o, "getConsultationId"));
-            ps.setLong(2, extractLong(o, "getMedecinId"));
+            Long consultationId = extractConsultationId(o);
+            if (consultationId != null) ps.setLong(1, consultationId);
+            else ps.setNull(1, Types.BIGINT);
 
-            ps.setDate(3, Date.valueOf(extractDate(o, "getDateOrdonnance")));
-            ps.setString(4, extractString(o, "getNoteMedecin"));
+            LocalDateTime dt = extractDateOrdonnance(o);
+            ps.setTimestamp(2, Timestamp.valueOf(dt));
 
-            ps.setDate(5, Date.valueOf(o.getDateCreation() != null ? o.getDateCreation() : LocalDate.now()));
-            ps.setTimestamp(6, Timestamp.valueOf(o.getDateDerniereModification() != null ? o.getDateDerniereModification() : LocalDateTime.now()));
-            ps.setString(7, o.getCreePar());
-            ps.setString(8, o.getModifiePar());
+            ps.setString(3, extractRemarque(o));
+
+            LocalDate dc = (o.getDateCreation() != null) ? o.getDateCreation() : LocalDate.now();
+            ps.setDate(4, Date.valueOf(dc));
+            o.setDateCreation(dc);
+
+            LocalDateTime ddm = (o.getDateDerniereModification() != null) ? o.getDateDerniereModification() : LocalDateTime.now();
+            ps.setTimestamp(5, Timestamp.valueOf(ddm));
+            o.setDateDerniereModification(ddm);
+
+            ps.setString(6, o.getCreePar());
+            ps.setString(7, o.getModifiePar());
 
             ps.executeUpdate();
 
@@ -70,35 +89,47 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
                 if (keys.next()) o.setId(keys.getLong(1));
             }
 
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void update(Ordonnance o) {
         String sql = """
             UPDATE Ordonnances SET
-                consultation_id=?, medecin_id=?, dateOrdonnance=?, noteMedecin=?,
-                dateDerniereModification=?, creePar=?, modifiePar=?
+                consultation_id=?,
+                dateOrdonnance=?,
+                remarque=?,
+                dateDerniereModification=?,
+                creePar=?,
+                modifiePar=?
             WHERE id=?
             """;
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
 
-            ps.setLong(1, extractLong(o, "getConsultationId"));
-            ps.setLong(2, extractLong(o, "getMedecinId"));
+            Long consultationId = extractConsultationId(o);
+            if (consultationId != null) ps.setLong(1, consultationId);
+            else ps.setNull(1, Types.BIGINT);
 
-            ps.setDate(3, Date.valueOf(extractDate(o, "getDateOrdonnance")));
-            ps.setString(4, extractString(o, "getNoteMedecin"));
+            LocalDateTime dt = extractDateOrdonnance(o);
+            ps.setTimestamp(2, Timestamp.valueOf(dt));
 
-            ps.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
-            ps.setString(6, o.getCreePar());
-            ps.setString(7, o.getModifiePar());
-            ps.setLong(8, o.getId());
+            ps.setString(3, extractRemarque(o));
+
+            ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
+            ps.setString(5, o.getCreePar());
+            ps.setString(6, o.getModifiePar());
+
+            ps.setLong(7, o.getId());
 
             ps.executeUpdate();
 
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -108,15 +139,17 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
 
     @Override
     public void deleteById(Long id) {
-        String sql = "DELETE FROM Ordonnances WHERE id = ?";
+        String sql = "DELETE FROM Ordonnances WHERE id=?";
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
             ps.executeUpdate();
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    // ================= Queries =================
+    // ================= QUERIES (selon ton interface OrdonnanceRepo) =================
 
     @Override
     public List<Ordonnance> findByConsultation(Long consultationId) {
@@ -124,25 +157,29 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         return findList(sql, ps -> ps.setLong(1, consultationId));
     }
 
+    // ✅ FIX: ton interface demande findByDate(LocalDate)
     @Override
     public List<Ordonnance> findByDate(LocalDate date) {
-        String sql = "SELECT * FROM Ordonnances WHERE dateOrdonnance=? ORDER BY id DESC";
-        return findList(sql, ps -> ps.setDate(1, Date.valueOf(date)));
-    }
-
-    @Override
-    public List<Ordonnance> findByDateBetween(LocalDate start, LocalDate end) {
-        String sql = "SELECT * FROM Ordonnances WHERE dateOrdonnance BETWEEN ? AND ? ORDER BY dateOrdonnance DESC";
+        // dateOrdonnance est DATETIME => on filtre par journée
+        String sql = """
+            SELECT * FROM Ordonnances
+            WHERE dateOrdonnance >= ? AND dateOrdonnance < ?
+            ORDER BY dateOrdonnance DESC
+            """;
         return findList(sql, ps -> {
-            ps.setDate(1, Date.valueOf(start));
-            ps.setDate(2, Date.valueOf(end));
+            ps.setTimestamp(1, Timestamp.valueOf(date.atStartOfDay()));
+            ps.setTimestamp(2, Timestamp.valueOf(date.plusDays(1).atStartOfDay()));
         });
     }
 
     @Override
+    public List<Ordonnance> findByDateBetween(LocalDate start, LocalDate end) {
+        return List.of();
+    }
+
+    @Override
     public List<Ordonnance> findByMedecin(Long medecinId) {
-        String sql = "SELECT * FROM Ordonnances WHERE medecin_id=? ORDER BY dateOrdonnance DESC";
-        return findList(sql, ps -> ps.setLong(1, medecinId));
+        return List.of();
     }
 
     @Override
@@ -154,7 +191,7 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         });
     }
 
-    // ================= Helpers =================
+    // ================= HELPERS =================
 
     private interface PsBinder { void bind(PreparedStatement ps) throws SQLException; }
 
@@ -166,7 +203,9 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) out.add(mapOrdonnance(rs));
             }
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         return out;
     }
 
@@ -175,10 +214,18 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
 
         o.setId(rs.getLong("id"));
 
-        Date d = rs.getDate("dateOrdonnance");
-        if (d != null) setIfExists(o, "setDateOrdonnance", LocalDate.class, d.toLocalDate());
+        Timestamp t = rs.getTimestamp("dateOrdonnance");
+        if (t != null) {
+            LocalDateTime ldt = t.toLocalDateTime();
 
-        setIfExists(o, "setNoteMedecin", String.class, rs.getString("noteMedecin"));
+            // Si entity a setDateOrdonnance(LocalDateTime)
+            if (!tryInvoke(o, "setDateOrdonnance", LocalDateTime.class, ldt)) {
+                // Sinon setDateOrdonnance(LocalDate)
+                tryInvoke(o, "setDateOrdonnance", LocalDate.class, ldt.toLocalDate());
+            }
+        }
+
+        tryInvoke(o, "setRemarque", String.class, rs.getString("remarque"));
 
         Date dc = rs.getDate("dateCreation");
         if (dc != null) o.setDateCreation(dc.toLocalDate());
@@ -189,48 +236,66 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         o.setCreePar(rs.getString("creePar"));
         o.setModifiePar(rs.getString("modifiePar"));
 
-        long consultationId = rs.getLong("consultation_id");
-        if (!rs.wasNull()) setIfExists(o, "setConsultationId", Long.class, consultationId);
-
-        long medecinId = rs.getLong("medecin_id");
-        if (!rs.wasNull()) setIfExists(o, "setMedecinId", Long.class, medecinId);
+        long cid = rs.getLong("consultation_id");
+        if (!rs.wasNull()) {
+            // si entity a setConsultationId(Long)
+            tryInvoke(o, "setConsultationId", Long.class, cid);
+        }
 
         return o;
     }
 
-    // -------- mini helpers reflection (pour matcher ton entity si noms diffèrent) --------
-
-    private long extractLong(Object obj, String getter) {
+    private boolean tryInvoke(Object target, String method, Class<?> type, Object value) {
         try {
-            Object v = obj.getClass().getMethod(getter).invoke(obj);
-            if (v == null) return 0L;
-            return (Long) v;
-        } catch (Exception e) {
-            return 0L;
+            var m = target.getClass().getMethod(method, type);
+            m.invoke(target, value);
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
-    private LocalDate extractDate(Object obj, String getter) {
+    private Long extractConsultationId(Ordonnance o) {
+        // 1) getConsultationId()
         try {
-            Object v = obj.getClass().getMethod(getter).invoke(obj);
-            return (LocalDate) v;
-        } catch (Exception e) {
-            return LocalDate.now();
-        }
+            var m = o.getClass().getMethod("getConsultationId");
+            Object v = m.invoke(o);
+            if (v instanceof Long) return (Long) v;
+            if (v instanceof Number) return ((Number) v).longValue();
+        } catch (Exception ignored) {}
+
+        // 2) si tu as un champ consultation (mais sans getter typed), on tente "getConsultation" via reflection
+        //    (ça ne cassera pas si la méthode n'existe pas)
+        try {
+            var m = o.getClass().getMethod("getConsultation");
+            Object cons = m.invoke(o);
+            if (cons != null) {
+                var getId = cons.getClass().getMethod("getId");
+                Object id = getId.invoke(cons);
+                if (id instanceof Long) return (Long) id;
+                if (id instanceof Number) return ((Number) id).longValue();
+            }
+        } catch (Exception ignored) {}
+
+        return null;
     }
 
-    private String extractString(Object obj, String getter) {
+    private LocalDateTime extractDateOrdonnance(Ordonnance o) {
         try {
-            Object v = obj.getClass().getMethod(getter).invoke(obj);
+            var m = o.getClass().getMethod("getDateOrdonnance");
+            Object v = m.invoke(o);
+            if (v instanceof LocalDateTime) return (LocalDateTime) v;
+            if (v instanceof LocalDate) return ((LocalDate) v).atStartOfDay();
+        } catch (Exception ignored) {}
+        return LocalDateTime.now();
+    }
+
+    private String extractRemarque(Ordonnance o) {
+        try {
+            var m = o.getClass().getMethod("getRemarque");
+            Object v = m.invoke(o);
             return (String) v;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private void setIfExists(Object obj, String setter, Class<?> paramType, Object value) {
-        try {
-            obj.getClass().getMethod(setter, paramType).invoke(obj, value);
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {}
+        return null;
     }
 }

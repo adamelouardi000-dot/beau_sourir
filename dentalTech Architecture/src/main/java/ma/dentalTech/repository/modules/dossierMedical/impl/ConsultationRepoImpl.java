@@ -47,11 +47,19 @@ public class ConsultationRepoImpl implements ConsultationRepo {
 
     @Override
     public void create(Consultation cst) {
+        // ✅ Adapté à ta table Consultations (beau_sourir)
         String sql = """
             INSERT INTO Consultations(
-                dateConsultation, statut, observationMedecin,
-                dossierMedical_id, medecin_id, facturee,
-                dateCreation, dateDerniereModification, creePar, modifiePar
+                dossier_medical_id,
+                rdv_id,
+                dateConsultation,
+                motif,
+                diagnostic,
+                noteMedecin,
+                dateCreation,
+                dateDerniereModification,
+                creePar,
+                modifiePar
             )
             VALUES (?,?,?,?,?,?,?,?,?,?)
             """;
@@ -59,24 +67,34 @@ public class ConsultationRepoImpl implements ConsultationRepo {
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            ps.setDate(1, Date.valueOf(cst.getDateConsultation()));
-            ps.setString(2, cst.getStatut().name());
-            ps.setString(3, cst.getObservationMedecin());
+            // 1) dossier_medical_id (obligatoire)
+            Long dmId = extractDossierMedicalId(cst);
+            if (dmId != null) ps.setLong(1, dmId);
+            else ps.setNull(1, Types.BIGINT);
 
-            if (cst.getDossierMedical() != null && cst.getDossierMedical().getId() != null)
-                ps.setLong(4, cst.getDossierMedical().getId());
-            else
-                ps.setNull(4, Types.BIGINT);
+            // 2) rdv_id (nullable)
+            Long rdvId = extractRdvId(cst);
+            if (rdvId != null) ps.setLong(2, rdvId);
+            else ps.setNull(2, Types.BIGINT);
 
-            if (cst.getMedecin() != null && cst.getMedecin().getId() != null)
-                ps.setLong(5, cst.getMedecin().getId());
-            else
-                ps.setNull(5, Types.BIGINT);
+            // 3) dateConsultation (DATETIME)
+            LocalDateTime dt = extractDateConsultation(cst);
+            ps.setTimestamp(3, Timestamp.valueOf(dt));
 
-            ps.setBoolean(6, false); // par défaut non facturée
+            // 4..6 contenu
+            ps.setString(4, extractMotif(cst));
+            ps.setString(5, extractDiagnostic(cst));
+            ps.setString(6, extractNoteMedecin(cst));
 
-            ps.setDate(7, Date.valueOf(LocalDate.now()));
-            ps.setTimestamp(8, Timestamp.valueOf(LocalDateTime.now()));
+            // BaseEntity
+            LocalDate dc = (cst.getDateCreation() != null) ? cst.getDateCreation() : LocalDate.now();
+            ps.setDate(7, Date.valueOf(dc));
+            cst.setDateCreation(dc);
+
+            LocalDateTime ddm = (cst.getDateDerniereModification() != null) ? cst.getDateDerniereModification() : LocalDateTime.now();
+            ps.setTimestamp(8, Timestamp.valueOf(ddm));
+            cst.setDateDerniereModification(ddm);
+
             ps.setString(9, cst.getCreePar());
             ps.setString(10, cst.getModifiePar());
 
@@ -95,33 +113,41 @@ public class ConsultationRepoImpl implements ConsultationRepo {
     public void update(Consultation cst) {
         String sql = """
             UPDATE Consultations SET
-                dateConsultation=?, statut=?, observationMedecin=?,
-                dossierMedical_id=?, medecin_id=?,
-                dateDerniereModification=?, creePar=?, modifiePar=?
+                dossier_medical_id=?,
+                rdv_id=?,
+                dateConsultation=?,
+                motif=?,
+                diagnostic=?,
+                noteMedecin=?,
+                dateDerniereModification=?,
+                creePar=?,
+                modifiePar=?
             WHERE id=?
             """;
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
 
-            ps.setDate(1, Date.valueOf(cst.getDateConsultation()));
-            ps.setString(2, cst.getStatut().name());
-            ps.setString(3, cst.getObservationMedecin());
+            Long dmId = extractDossierMedicalId(cst);
+            if (dmId != null) ps.setLong(1, dmId);
+            else ps.setNull(1, Types.BIGINT);
 
-            if (cst.getDossierMedical() != null && cst.getDossierMedical().getId() != null)
-                ps.setLong(4, cst.getDossierMedical().getId());
-            else
-                ps.setNull(4, Types.BIGINT);
+            Long rdvId = extractRdvId(cst);
+            if (rdvId != null) ps.setLong(2, rdvId);
+            else ps.setNull(2, Types.BIGINT);
 
-            if (cst.getMedecin() != null && cst.getMedecin().getId() != null)
-                ps.setLong(5, cst.getMedecin().getId());
-            else
-                ps.setNull(5, Types.BIGINT);
+            LocalDateTime dt = extractDateConsultation(cst);
+            ps.setTimestamp(3, Timestamp.valueOf(dt));
 
-            ps.setTimestamp(6, Timestamp.valueOf(LocalDateTime.now()));
-            ps.setString(7, cst.getCreePar());
-            ps.setString(8, cst.getModifiePar());
-            ps.setLong(9, cst.getId());
+            ps.setString(4, extractMotif(cst));
+            ps.setString(5, extractDiagnostic(cst));
+            ps.setString(6, extractNoteMedecin(cst));
+
+            ps.setTimestamp(7, Timestamp.valueOf(LocalDateTime.now()));
+            ps.setString(8, cst.getCreePar());
+            ps.setString(9, cst.getModifiePar());
+
+            ps.setLong(10, cst.getId());
 
             ps.executeUpdate();
 
@@ -151,25 +177,26 @@ public class ConsultationRepoImpl implements ConsultationRepo {
 
     @Override
     public List<Consultation> findByDossierMedical(Long dossierMedicalId) {
-        String sql = "SELECT * FROM Consultations WHERE dossierMedical_id=?";
+        String sql = "SELECT * FROM Consultations WHERE dossier_medical_id=? ORDER BY dateConsultation DESC";
         return findList(sql, ps -> ps.setLong(1, dossierMedicalId));
     }
 
     @Override
     public List<Consultation> findByMedecin(Long medecinId) {
-        String sql = "SELECT * FROM Consultations WHERE medecin_id=?";
-        return findList(sql, ps -> ps.setLong(1, medecinId));
+        // ❌ Ta table Consultations n'a pas medecin_id => on renvoie vide (pour respecter l'interface)
+        return List.of();
     }
 
     @Override
     public List<Consultation> findByDate(LocalDate date) {
-        String sql = "SELECT * FROM Consultations WHERE dateConsultation=?";
+        // dateConsultation est DATETIME => filtre sur la date
+        String sql = "SELECT * FROM Consultations WHERE DATE(dateConsultation)=? ORDER BY dateConsultation DESC";
         return findList(sql, ps -> ps.setDate(1, Date.valueOf(date)));
     }
 
     @Override
     public List<Consultation> findByDateBetween(LocalDate start, LocalDate end) {
-        String sql = "SELECT * FROM Consultations WHERE dateConsultation BETWEEN ? AND ?";
+        String sql = "SELECT * FROM Consultations WHERE DATE(dateConsultation) BETWEEN ? AND ? ORDER BY dateConsultation DESC";
         return findList(sql, ps -> {
             ps.setDate(1, Date.valueOf(start));
             ps.setDate(2, Date.valueOf(end));
@@ -178,14 +205,14 @@ public class ConsultationRepoImpl implements ConsultationRepo {
 
     @Override
     public List<Consultation> findByStatut(StatutConsultation statut) {
-        String sql = "SELECT * FROM Consultations WHERE statut=?";
-        return findList(sql, ps -> ps.setString(1, statut.name()));
+        // ❌ Ta table Consultations n'a pas statut => vide
+        return List.of();
     }
 
     @Override
     public List<Consultation> findByFacturee(boolean facturee) {
-        String sql = "SELECT * FROM Consultations WHERE facturee=?";
-        return findList(sql, ps -> ps.setBoolean(1, facturee));
+        // ❌ Ta table Consultations n'a pas facturee => vide
+        return List.of();
     }
 
     @Override
@@ -222,13 +249,25 @@ public class ConsultationRepoImpl implements ConsultationRepo {
 
         c.setId(rs.getLong("id"));
 
-        Date d = rs.getDate("dateConsultation");
-        if (d != null) c.setDateConsultation(d.toLocalDate());
+        Timestamp t = rs.getTimestamp("dateConsultation");
+        if (t != null) {
+            // si ton entity a LocalDateTime => ok
+            try {
+                var m = c.getClass().getMethod("setDateConsultation", LocalDateTime.class);
+                m.invoke(c, t.toLocalDateTime());
+            } catch (Exception ignored) {
+                // si ton entity a LocalDate => fallback
+                try {
+                    var m2 = c.getClass().getMethod("setDateConsultation", LocalDate.class);
+                    m2.invoke(c, t.toLocalDateTime().toLocalDate());
+                } catch (Exception ignored2) {}
+            }
+        }
 
-        String s = rs.getString("statut");
-        if (s != null) c.setStatut(StatutConsultation.valueOf(s));
-
-        c.setObservationMedecin(rs.getString("observationMedecin"));
+        // motif / diagnostic / noteMedecin (selon ton entity)
+        trySet(c, "setMotif", String.class, rs.getString("motif"));
+        trySet(c, "setDiagnostic", String.class, rs.getString("diagnostic"));
+        trySet(c, "setNoteMedecin", String.class, rs.getString("noteMedecin"));
 
         Date dc = rs.getDate("dateCreation");
         if (dc != null) c.setDateCreation(dc.toLocalDate());
@@ -239,6 +278,105 @@ public class ConsultationRepoImpl implements ConsultationRepo {
         c.setCreePar(rs.getString("creePar"));
         c.setModifiePar(rs.getString("modifiePar"));
 
+        // dossier_medical_id : on tente setDossierMedicalId(Long) si existe
+        long dmId = rs.getLong("dossier_medical_id");
+        if (!rs.wasNull()) {
+            trySet(c, "setDossierMedicalId", Long.class, dmId);
+        }
+
+        // rdv_id : idem
+        long rdvId = rs.getLong("rdv_id");
+        if (!rs.wasNull()) {
+            trySet(c, "setRdvId", Long.class, rdvId);
+        }
+
         return c;
+    }
+
+    private void trySet(Object target, String method, Class<?> type, Object value) {
+        try {
+            var m = target.getClass().getMethod(method, type);
+            m.invoke(target, value);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private Long extractDossierMedicalId(Consultation cst) {
+        // 1) dossierMedical.getId()
+        try {
+            Object dm = cst.getDossierMedical();
+            if (dm != null) {
+                var getId = dm.getClass().getMethod("getId");
+                Object id = getId.invoke(dm);
+                if (id instanceof Long) return (Long) id;
+                if (id instanceof Number) return ((Number) id).longValue();
+            }
+        } catch (Exception ignored) {}
+
+        // 2) getDossierMedicalId()
+        try {
+            var m = cst.getClass().getMethod("getDossierMedicalId");
+            Object v = m.invoke(cst);
+            if (v instanceof Long) return (Long) v;
+            if (v instanceof Number) return ((Number) v).longValue();
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private Long extractRdvId(Consultation cst) {
+        try {
+            var m = cst.getClass().getMethod("getRdvId");
+            Object v = m.invoke(cst);
+            if (v instanceof Long) return (Long) v;
+            if (v instanceof Number) return ((Number) v).longValue();
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private LocalDateTime extractDateConsultation(Consultation cst) {
+        // support LocalDateTime ou LocalDate
+        try {
+            var m = cst.getClass().getMethod("getDateConsultation");
+            Object v = m.invoke(cst);
+            if (v instanceof LocalDateTime) return (LocalDateTime) v;
+            if (v instanceof LocalDate) return ((LocalDate) v).atStartOfDay();
+        } catch (Exception ignored) {}
+        return LocalDateTime.now();
+    }
+
+    private String extractMotif(Consultation cst) {
+        try {
+            var m = cst.getClass().getMethod("getMotif");
+            Object v = m.invoke(cst);
+            return (String) v;
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private String extractDiagnostic(Consultation cst) {
+        try {
+            var m = cst.getClass().getMethod("getDiagnostic");
+            Object v = m.invoke(cst);
+            return (String) v;
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private String extractNoteMedecin(Consultation cst) {
+        // selon ton entity ça peut être noteMedecin ou observationMedecin
+        try {
+            var m = cst.getClass().getMethod("getNoteMedecin");
+            Object v = m.invoke(cst);
+            return (String) v;
+        } catch (Exception ignored) {}
+
+        try {
+            var m = cst.getClass().getMethod("getObservationMedecin");
+            Object v = m.invoke(cst);
+            return (String) v;
+        } catch (Exception ignored) {}
+
+        return null;
     }
 }

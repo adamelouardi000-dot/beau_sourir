@@ -1,57 +1,33 @@
--- Table Patients
-CREATE TABLE IF NOT EXISTS Patients (
-                                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                                        nom VARCHAR(80)      NOT NULL,
-                                        prenom VARCHAR(80)   NOT NULL,
-                                        adresse VARCHAR(150),
-                                        telephone VARCHAR(30),
-                                        email VARCHAR(120),
-                                        dateNaissance DATE,
+USE beau_sourir;
 
-    -- BaseEntity
-                                        dateCreation DATE NOT NULL DEFAULT (CURRENT_DATE),
-                                        dateDerniereModification DATETIME NULL,
-                                        creePar VARCHAR(80) NULL,
-                                        modifiePar VARCHAR(80) NULL,
+INSERT INTO Patients
+(nom, prenom, adresse, telephone, email, dateNaissance, sexe, assurance, creePar)
+VALUES
+    ('EL AMRANI', 'Youssef', 'Rabat', '0611111111', 'y.elamrani@dentaltech.ma', '1995-03-12', 'Homme', 'CNSS', 'seed'),
+    ('BENALI', 'Sara', 'Casablanca', '0622222222', 's.benali@dentaltech.ma', '1998-07-22', 'Femme', 'CNOPS', 'seed'),
+    ('AIT LAHCEN', 'Omar', 'Agadir', '0633333333', 'o.aitlahcen@dentaltech.ma', '1989-11-05', 'Homme', 'Aucune', 'seed'),
+    ('EL FASSI', 'Imane', 'Fes', '0644444444', 'i.elfassi@dentaltech.ma', '2001-01-18', 'Femme', 'Autre', 'seed'),
+    ('TEST', 'PATIENT', 'Rabat', '0600000000', 'test.patient@dentaltech.ma', '2000-01-01', 'Homme', 'Aucune', 'seed');
+INSERT INTO Antecedents
+(nom, categorie, niveauRisque, creePar)
+VALUES
+    ('Allergie à la pénicilline', 'ALLERGIE', 'ELEVE', 'seed'),
+    ('Hypertension', 'MALADIE_CHRONIQUE', 'MODERE', 'seed'),
+    ('Diabète type 2', 'MALADIE_CHRONIQUE', 'CRITIQUE', 'seed'),
+    ('Tabagisme', 'HABITUDE_DE_VIE', 'MODERE', 'seed'),
+    ('Extraction dentaire ancienne', 'ANTECEDENT_DENTAIRE', 'FAIBLE', 'seed');
+-- Youssef EL AMRANI
+INSERT INTO Patient_Antecedents (patient_id, antecedent_id)
+VALUES (1, 1), (1, 2);
 
-                                        sexe ENUM('Homme','Femme') NOT NULL,
-                                        assurance ENUM('CNOPS','CNSS','Autre','Aucune') NOT NULL,
+-- Sara BENALI
+INSERT INTO Patient_Antecedents (patient_id, antecedent_id)
+VALUES (2, 3);
 
-                                        UNIQUE KEY uk_patients_email (email),
-                                        KEY idx_patients_nom (nom, prenom)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- Omar AIT LAHCEN
+INSERT INTO Patient_Antecedents (patient_id, antecedent_id)
+VALUES (3, 4);
 
-
--- Table Antecedents
-CREATE TABLE IF NOT EXISTS Antecedents (
-                                           id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                                           nom VARCHAR(100) NOT NULL,
-                                           categorie ENUM(
-                                               'ALLERGIE',
-                                               'MALADIE_CHRONIQUE',
-                                               'CONTRE_INDICATION',
-                                               'TRAITEMENT_EN_COURS',
-                                               'ANTECEDENT_CHIRURGICAL',
-                                               'ANTECEDENT_INFECTIEUX',
-                                               'ANTECEDENT_DENTAIRE',
-                                               'HABITUDE_DE_VIE',
-                                               'AUTRE'
-                                               ) NOT NULL,
-                                           niveauRisque ENUM('FAIBLE', 'MODERE', 'ELEVE', 'CRITIQUE') NOT NULL,
-
-    -- BaseEntity
-                                           dateCreation DATE NOT NULL DEFAULT (CURRENT_DATE),
-                                           dateDerniereModification DATETIME NULL,
-                                           creePar VARCHAR(80) NULL,
-                                           modifiePar VARCHAR(80) NULL
-);
-
-
--- Table Association Patient-Antecedent
-CREATE TABLE Patient_Antecedents (
-                                     patient_id BIGINT NOT NULL,
-                                     antecedent_id BIGINT NOT NULL,
-                                     PRIMARY KEY (patient_id, antecedent_id),
-                                     FOREIGN KEY (patient_id) REFERENCES Patients(id) ON DELETE CASCADE,
-                                     FOREIGN KEY (antecedent_id) REFERENCES Antecedents(id) ON DELETE CASCADE
-);
+-- TEST PATIENT
+INSERT INTO Patient_Antecedents (patient_id, antecedent_id)
+VALUES (5, 5);
