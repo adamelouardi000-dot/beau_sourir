@@ -13,8 +13,6 @@ import java.util.List;
 @SuppressWarnings("unused")
 public class OrdonnanceRepoImpl implements OrdonnanceRepo {
 
-    // ================= CRUD =================
-
     @Override
     public List<Ordonnance> findAll() {
         String sql = "SELECT * FROM Ordonnances ORDER BY dateOrdonnance DESC";
@@ -46,7 +44,10 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
 
     @Override
     public void create(Ordonnance o) {
-        // ✅ Table: Ordonnances(consultation_id, dateOrdonnance, remarque, dateCreation, dateDerniereModification, creePar, modifiePar)
+        if (o.getConsultationId() == null) {
+            throw new IllegalArgumentException("consultationId obligatoire (NULL trouvé dans Ordonnance)");
+        }
+
         String sql = """
             INSERT INTO Ordonnances(
                 consultation_id,
@@ -63,12 +64,13 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            Long consultationId = extractConsultationId(o);
-            if (consultationId != null) ps.setLong(1, consultationId);
-            else ps.setNull(1, Types.BIGINT);
+            ps.setLong(1, o.getConsultationId());
 
-            LocalDateTime dt = extractDateOrdonnance(o);
-            ps.setTimestamp(2, Timestamp.valueOf(dt));
+            // dateOrdonnance DATETIME
+            LocalDateTime dOrd = extractDateOrdonnance(o);
+            if (dOrd == null) dOrd = LocalDateTime.now();
+            ps.setTimestamp(2, Timestamp.valueOf(dOrd));
+            setDateOrdonnance(o, dOrd);
 
             ps.setString(3, extractRemarque(o));
 
@@ -76,15 +78,14 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
             ps.setDate(4, Date.valueOf(dc));
             o.setDateCreation(dc);
 
-            LocalDateTime ddm = (o.getDateDerniereModification() != null) ? o.getDateDerniereModification() : LocalDateTime.now();
-            ps.setTimestamp(5, Timestamp.valueOf(ddm));
-            o.setDateDerniereModification(ddm);
+            LocalDateTime dm = (o.getDateDerniereModification() != null) ? o.getDateDerniereModification() : LocalDateTime.now();
+            ps.setTimestamp(5, Timestamp.valueOf(dm));
+            o.setDateDerniereModification(dm);
 
             ps.setString(6, o.getCreePar());
             ps.setString(7, o.getModifiePar());
 
             ps.executeUpdate();
-
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 if (keys.next()) o.setId(keys.getLong(1));
             }
@@ -96,6 +97,8 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
 
     @Override
     public void update(Ordonnance o) {
+        if (o.getConsultationId() == null) throw new IllegalArgumentException("consultationId obligatoire");
+
         String sql = """
             UPDATE Ordonnances SET
                 consultation_id=?,
@@ -110,19 +113,16 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
 
-            Long consultationId = extractConsultationId(o);
-            if (consultationId != null) ps.setLong(1, consultationId);
-            else ps.setNull(1, Types.BIGINT);
+            ps.setLong(1, o.getConsultationId());
 
-            LocalDateTime dt = extractDateOrdonnance(o);
-            ps.setTimestamp(2, Timestamp.valueOf(dt));
+            LocalDateTime dOrd = extractDateOrdonnance(o);
+            if (dOrd == null) dOrd = LocalDateTime.now();
+            ps.setTimestamp(2, Timestamp.valueOf(dOrd));
 
             ps.setString(3, extractRemarque(o));
-
             ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
             ps.setString(5, o.getCreePar());
             ps.setString(6, o.getModifiePar());
-
             ps.setLong(7, o.getId());
 
             ps.executeUpdate();
@@ -149,7 +149,7 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         }
     }
 
-    // ================= QUERIES (selon ton interface OrdonnanceRepo) =================
+    // ================= QUERIES =================
 
     @Override
     public List<Ordonnance> findByConsultation(Long consultationId) {
@@ -157,29 +157,37 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         return findList(sql, ps -> ps.setLong(1, consultationId));
     }
 
-    // ✅ FIX: ton interface demande findByDate(LocalDate)
     @Override
     public List<Ordonnance> findByDate(LocalDate date) {
-        // dateOrdonnance est DATETIME => on filtre par journée
-        String sql = """
-            SELECT * FROM Ordonnances
-            WHERE dateOrdonnance >= ? AND dateOrdonnance < ?
-            ORDER BY dateOrdonnance DESC
-            """;
-        return findList(sql, ps -> {
-            ps.setTimestamp(1, Timestamp.valueOf(date.atStartOfDay()));
-            ps.setTimestamp(2, Timestamp.valueOf(date.plusDays(1).atStartOfDay()));
-        });
+        String sql = "SELECT * FROM Ordonnances WHERE DATE(dateOrdonnance)=? ORDER BY dateOrdonnance DESC";
+        return findList(sql, ps -> ps.setDate(1, Date.valueOf(date)));
     }
 
     @Override
     public List<Ordonnance> findByDateBetween(LocalDate start, LocalDate end) {
-        return List.of();
+        String sql = """
+            SELECT * FROM Ordonnances
+            WHERE DATE(dateOrdonnance) BETWEEN ? AND ?
+            ORDER BY dateOrdonnance DESC
+            """;
+        return findList(sql, ps -> {
+            ps.setDate(1, Date.valueOf(start));
+            ps.setDate(2, Date.valueOf(end));
+        });
     }
 
     @Override
     public List<Ordonnance> findByMedecin(Long medecinId) {
-        return List.of();
+        // join via consultations -> dossiersMedicaux (qui contient medecin_id)
+        String sql = """
+            SELECT o.*
+            FROM Ordonnances o
+            JOIN Consultations c ON c.id = o.consultation_id
+            JOIN DossiersMedicaux dm ON dm.id = c.dossier_medical_id
+            WHERE dm.medecin_id = ?
+            ORDER BY o.dateOrdonnance DESC
+            """;
+        return findList(sql, ps -> ps.setLong(1, medecinId));
     }
 
     @Override
@@ -213,17 +221,10 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         Ordonnance o = new Ordonnance();
 
         o.setId(rs.getLong("id"));
+        o.setConsultationId(rs.getLong("consultation_id"));
 
-        Timestamp t = rs.getTimestamp("dateOrdonnance");
-        if (t != null) {
-            LocalDateTime ldt = t.toLocalDateTime();
-
-            // Si entity a setDateOrdonnance(LocalDateTime)
-            if (!tryInvoke(o, "setDateOrdonnance", LocalDateTime.class, ldt)) {
-                // Sinon setDateOrdonnance(LocalDate)
-                tryInvoke(o, "setDateOrdonnance", LocalDate.class, ldt.toLocalDate());
-            }
-        }
+        Timestamp ts = rs.getTimestamp("dateOrdonnance");
+        if (ts != null) setDateOrdonnance(o, ts.toLocalDateTime());
 
         tryInvoke(o, "setRemarque", String.class, rs.getString("remarque"));
 
@@ -236,13 +237,30 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         o.setCreePar(rs.getString("creePar"));
         o.setModifiePar(rs.getString("modifiePar"));
 
-        long cid = rs.getLong("consultation_id");
-        if (!rs.wasNull()) {
-            // si entity a setConsultationId(Long)
-            tryInvoke(o, "setConsultationId", Long.class, cid);
-        }
-
         return o;
+    }
+
+    private LocalDateTime extractDateOrdonnance(Ordonnance o) {
+        try {
+            Object v = o.getClass().getMethod("getDateOrdonnance").invoke(o);
+            if (v instanceof LocalDateTime) return (LocalDateTime) v;
+            if (v instanceof LocalDate) return ((LocalDate) v).atStartOfDay();
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private void setDateOrdonnance(Ordonnance o, LocalDateTime dt) {
+        if (tryInvoke(o, "setDateOrdonnance", LocalDateTime.class, dt)) return;
+        tryInvoke(o, "setDateOrdonnance", LocalDate.class, dt.toLocalDate());
+    }
+
+    private String extractRemarque(Ordonnance o) {
+        try {
+            Object v = o.getClass().getMethod("getRemarque").invoke(o);
+            return (v instanceof String) ? (String) v : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private boolean tryInvoke(Object target, String method, Class<?> type, Object value) {
@@ -253,49 +271,5 @@ public class OrdonnanceRepoImpl implements OrdonnanceRepo {
         } catch (Exception ignored) {
             return false;
         }
-    }
-
-    private Long extractConsultationId(Ordonnance o) {
-        // 1) getConsultationId()
-        try {
-            var m = o.getClass().getMethod("getConsultationId");
-            Object v = m.invoke(o);
-            if (v instanceof Long) return (Long) v;
-            if (v instanceof Number) return ((Number) v).longValue();
-        } catch (Exception ignored) {}
-
-        // 2) si tu as un champ consultation (mais sans getter typed), on tente "getConsultation" via reflection
-        //    (ça ne cassera pas si la méthode n'existe pas)
-        try {
-            var m = o.getClass().getMethod("getConsultation");
-            Object cons = m.invoke(o);
-            if (cons != null) {
-                var getId = cons.getClass().getMethod("getId");
-                Object id = getId.invoke(cons);
-                if (id instanceof Long) return (Long) id;
-                if (id instanceof Number) return ((Number) id).longValue();
-            }
-        } catch (Exception ignored) {}
-
-        return null;
-    }
-
-    private LocalDateTime extractDateOrdonnance(Ordonnance o) {
-        try {
-            var m = o.getClass().getMethod("getDateOrdonnance");
-            Object v = m.invoke(o);
-            if (v instanceof LocalDateTime) return (LocalDateTime) v;
-            if (v instanceof LocalDate) return ((LocalDate) v).atStartOfDay();
-        } catch (Exception ignored) {}
-        return LocalDateTime.now();
-    }
-
-    private String extractRemarque(Ordonnance o) {
-        try {
-            var m = o.getClass().getMethod("getRemarque");
-            Object v = m.invoke(o);
-            return (String) v;
-        } catch (Exception ignored) {}
-        return null;
     }
 }

@@ -1,6 +1,8 @@
 package ma.dentalTech.repository.modules.dossierMedical.impl;
 
 import ma.dentalTech.configuration.SessionFactory;
+import ma.dentalTech.entities.dossierMedical.Medicament;
+import ma.dentalTech.entities.dossierMedical.Ordonnance;
 import ma.dentalTech.entities.dossierMedical.Prescription;
 import ma.dentalTech.repository.modules.dossierMedical.api.PrescriptionRepo;
 
@@ -13,8 +15,6 @@ import java.util.List;
 @SuppressWarnings("unused")
 public class PrescriptionRepoImpl implements PrescriptionRepo {
 
-    // ================= CRUD =================
-
     @Override
     public List<Prescription> findAll() {
         String sql = "SELECT * FROM Prescriptions ORDER BY id DESC";
@@ -23,7 +23,9 @@ public class PrescriptionRepoImpl implements PrescriptionRepo {
              PreparedStatement ps = c.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) out.add(mapPrescription(rs));
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         return out;
     }
 
@@ -37,38 +39,67 @@ public class PrescriptionRepoImpl implements PrescriptionRepo {
                 if (rs.next()) return mapPrescription(rs);
                 return null;
             }
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void create(Prescription p) {
+        // Table: ordonnance_id, medicament_id, posologie, duree(VARCHAR), quantite + BaseEntity
         String sql = """
             INSERT INTO Prescriptions(
-                ordonnance_id, medicament_id, dosage, frequence, duree, note,
-                dateCreation, dateDerniereModification, creePar, modifiePar
+                ordonnance_id,
+                medicament_id,
+                posologie,
+                duree,
+                quantite,
+                dateCreation,
+                dateDerniereModification,
+                creePar,
+                modifiePar
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?)
             """;
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            ps.setLong(1, extractLong(p, "getOrdonnanceId"));
-            ps.setLong(2, extractLong(p, "getMedicamentId"));
+            Long ordonnanceId = extractOrdonnanceId(p);
+            Long medicamentId = extractMedicamentId(p);
 
-            ps.setString(3, extractString(p, "getDosage"));
-            ps.setString(4, extractString(p, "getFrequence"));
+            if (ordonnanceId == null) {
+                throw new IllegalArgumentException("ordonnanceId obligatoire (NULL trouvé dans Prescription)");
+            }
+            if (medicamentId == null) {
+                throw new IllegalArgumentException("medicamentId obligatoire (NULL trouvé dans Prescription)");
+            }
 
-            Integer duree = extractInt(p, "getDuree");
-            if (duree != null) ps.setInt(5, duree);
+            ps.setLong(1, ordonnanceId);
+            ps.setLong(2, medicamentId);
+
+            // posologie NOT NULL -> entity.frequence
+            String posologie = p.getFrequence();
+            if (posologie == null || posologie.isBlank()) posologie = "1 fois / jour";
+            ps.setString(3, posologie);
+
+            // duree est VARCHAR(80) en BD -> on stocke le nombre de jours
+            String dureeStr = (p.getDureeEnJours() != null) ? String.valueOf(p.getDureeEnJours()) : null;
+            ps.setString(4, dureeStr);
+
+            if (p.getQuantite() != null) ps.setInt(5, p.getQuantite());
             else ps.setNull(5, Types.INTEGER);
 
-            ps.setString(6, extractString(p, "getNote"));
+            LocalDate dc = (p.getDateCreation() != null) ? p.getDateCreation() : LocalDate.now();
+            ps.setDate(6, Date.valueOf(dc));
+            p.setDateCreation(dc);
 
-            ps.setDate(7, Date.valueOf(p.getDateCreation() != null ? p.getDateCreation() : LocalDate.now()));
-            ps.setTimestamp(8, Timestamp.valueOf(p.getDateDerniereModification() != null ? p.getDateDerniereModification() : LocalDateTime.now()));
-            ps.setString(9, p.getCreePar());
-            ps.setString(10, p.getModifiePar());
+            LocalDateTime dm = (p.getDateDerniereModification() != null) ? p.getDateDerniereModification() : LocalDateTime.now();
+            ps.setTimestamp(7, Timestamp.valueOf(dm));
+            p.setDateDerniereModification(dm);
+
+            ps.setString(8, p.getCreePar());
+            ps.setString(9, p.getModifiePar());
 
             ps.executeUpdate();
 
@@ -76,41 +107,57 @@ public class PrescriptionRepoImpl implements PrescriptionRepo {
                 if (keys.next()) p.setId(keys.getLong(1));
             }
 
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void update(Prescription p) {
         String sql = """
             UPDATE Prescriptions SET
-                ordonnance_id=?, medicament_id=?, dosage=?, frequence=?, duree=?, note=?,
-                dateDerniereModification=?, creePar=?, modifiePar=?
+                ordonnance_id=?,
+                medicament_id=?,
+                posologie=?,
+                duree=?,
+                quantite=?,
+                dateDerniereModification=?,
+                creePar=?,
+                modifiePar=?
             WHERE id=?
             """;
 
         try (Connection c = SessionFactory.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
 
-            ps.setLong(1, extractLong(p, "getOrdonnanceId"));
-            ps.setLong(2, extractLong(p, "getMedicamentId"));
+            Long ordonnanceId = extractOrdonnanceId(p);
+            Long medicamentId = extractMedicamentId(p);
 
-            ps.setString(3, extractString(p, "getDosage"));
-            ps.setString(4, extractString(p, "getFrequence"));
+            if (ordonnanceId == null) throw new IllegalArgumentException("ordonnanceId obligatoire");
+            if (medicamentId == null) throw new IllegalArgumentException("medicamentId obligatoire");
 
-            Integer duree = extractInt(p, "getDuree");
-            if (duree != null) ps.setInt(5, duree);
+            ps.setLong(1, ordonnanceId);
+            ps.setLong(2, medicamentId);
+
+            String posologie = p.getFrequence();
+            if (posologie == null || posologie.isBlank()) posologie = "1 fois / jour";
+            ps.setString(3, posologie);
+
+            ps.setString(4, (p.getDureeEnJours() != null) ? String.valueOf(p.getDureeEnJours()) : null);
+
+            if (p.getQuantite() != null) ps.setInt(5, p.getQuantite());
             else ps.setNull(5, Types.INTEGER);
 
-            ps.setString(6, extractString(p, "getNote"));
-
-            ps.setTimestamp(7, Timestamp.valueOf(LocalDateTime.now()));
-            ps.setString(8, p.getCreePar());
-            ps.setString(9, p.getModifiePar());
-            ps.setLong(10, p.getId());
+            ps.setTimestamp(6, Timestamp.valueOf(LocalDateTime.now()));
+            ps.setString(7, p.getCreePar());
+            ps.setString(8, p.getModifiePar());
+            ps.setLong(9, p.getId());
 
             ps.executeUpdate();
 
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -125,7 +172,9 @@ public class PrescriptionRepoImpl implements PrescriptionRepo {
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, id);
             ps.executeUpdate();
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ================= Queries =================
@@ -172,28 +221,44 @@ public class PrescriptionRepoImpl implements PrescriptionRepo {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) out.add(mapPrescription(rs));
             }
-        } catch (SQLException e) { throw new RuntimeException(e); }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         return out;
     }
 
     private Prescription mapPrescription(ResultSet rs) throws SQLException {
         Prescription p = new Prescription();
-
         p.setId(rs.getLong("id"));
 
+        // ordonnance
         long ordonnanceId = rs.getLong("ordonnance_id");
-        if (!rs.wasNull()) setIfExists(p, "setOrdonnanceId", Long.class, ordonnanceId);
+        if (!rs.wasNull()) {
+            Ordonnance o = new Ordonnance();
+            setIdAny(o, ordonnanceId);
+            p.setOrdonnance(o);
+        }
 
+        // medicament
         long medicamentId = rs.getLong("medicament_id");
-        if (!rs.wasNull()) setIfExists(p, "setMedicamentId", Long.class, medicamentId);
+        if (!rs.wasNull()) {
+            Medicament m = new Medicament();
+            setIdAny(m, medicamentId);
+            p.setMedicament(m);
+        }
 
-        setIfExists(p, "setDosage", String.class, rs.getString("dosage"));
-        setIfExists(p, "setFrequence", String.class, rs.getString("frequence"));
+        // posologie -> frequence
+        p.setFrequence(rs.getString("posologie"));
 
-        int duree = rs.getInt("duree");
-        if (!rs.wasNull()) setIfExists(p, "setDuree", Integer.class, duree);
+        // duree (varchar) -> dureeEnJours (Integer) si possible
+        String dureeStr = rs.getString("duree");
+        if (dureeStr != null) {
+            try { p.setDureeEnJours(Integer.parseInt(dureeStr.trim())); }
+            catch (Exception ignored) { /* si non numérique, ignore */ }
+        }
 
-        setIfExists(p, "setNote", String.class, rs.getString("note"));
+        int qte = rs.getInt("quantite");
+        if (!rs.wasNull()) p.setQuantite(qte);
 
         Date dc = rs.getDate("dateCreation");
         if (dc != null) p.setDateCreation(dc.toLocalDate());
@@ -207,33 +272,23 @@ public class PrescriptionRepoImpl implements PrescriptionRepo {
         return p;
     }
 
-    // ---- petits helpers reflection (tolérant aux entities du prof) ----
-
-    private long extractLong(Object obj, String getter) {
-        try {
-            Object v = obj.getClass().getMethod(getter).invoke(obj);
-            if (v == null) return 0L;
-            return (Long) v;
-        } catch (Exception e) { return 0L; }
+    private Long extractOrdonnanceId(Prescription p) {
+        if (p.getOrdonnance() != null && p.getOrdonnance().getId() != null) return p.getOrdonnance().getId();
+        return null;
     }
 
-    private Integer extractInt(Object obj, String getter) {
-        try {
-            Object v = obj.getClass().getMethod(getter).invoke(obj);
-            return (Integer) v;
-        } catch (Exception e) { return null; }
+    private Long extractMedicamentId(Prescription p) {
+        if (p.getMedicament() != null && p.getMedicament().getId() != null) return p.getMedicament().getId();
+        return null;
     }
 
-    private String extractString(Object obj, String getter) {
+    private void setIdAny(Object obj, long id) {
         try {
-            Object v = obj.getClass().getMethod(getter).invoke(obj);
-            return (String) v;
-        } catch (Exception e) { return null; }
-    }
-
-    private void setIfExists(Object obj, String setter, Class<?> paramType, Object value) {
+            obj.getClass().getMethod("setId", Long.class).invoke(obj, id);
+            return;
+        } catch (Exception ignored) {}
         try {
-            obj.getClass().getMethod(setter, paramType).invoke(obj, value);
-        } catch (Exception ignored) { }
+            obj.getClass().getMethod("setId", long.class).invoke(obj, id);
+        } catch (Exception ignored) {}
     }
 }

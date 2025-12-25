@@ -20,6 +20,8 @@ public class Ordonnance extends BaseEntity {
     private LocalDate date;
     private DossierMedical dossierMedical;
     private Medecin medecin;
+    private Long consultationId;
+
 
     private List<Prescription> prescriptions = new ArrayList<>();
 

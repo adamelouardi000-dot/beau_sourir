@@ -2,7 +2,7 @@ package ma.dentalTech.mvc.dto;
 
 public record PrescriptionDto(
         Long id,
-        String medicament,
+        Long ordonnanceId, String medicament,
         String posologie,
         int duree
 ) {}
